@@ -1,0 +1,66 @@
+{
+  "profiles": [
+    {
+      "id": "local-profile",
+      "has_squat_rack": false,
+      "has_pullup_bar": false,
+      "has_bench": true,
+      "has_fridge": false,
+      "has_kettle": false,
+      "max_db_weight_kg": 15,
+      "target_calories": 2200,
+      "target_protein": 160,
+      "hidden_calorie_buffer_percent": 10,
+      "updated_at": "2026-03-27T08:15:00.886Z"
+    }
+  ],
+  "workout_logs": [],
+  "meal_logs": [
+    {
+      "id": "47662ea8-c313-43bd-884d-24c1dda31e5c",
+      "profile_id": "local-profile",
+      "meal_name": "Egg chicken roll",
+      "calories": 451,
+      "protein": 33,
+      "is_outside_food": false,
+      "outside_calories": 0,
+      "consumed_on": "2026-03-27",
+      "created_at": "2026-03-27T08:23:25.123Z"
+    },
+    {
+      "id": "f181fbd4-2f63-42fe-ad5a-0b622bf7221d",
+      "profile_id": "local-profile",
+      "meal_name": "chicken rolls",
+      "calories": 437,
+      "protein": 23,
+      "is_outside_food": false,
+      "outside_calories": 0,
+      "consumed_on": "2026-03-27",
+      "created_at": "2026-03-27T08:23:58.772Z"
+    },
+    {
+      "id": "762b4b7f-0b52-498d-9cd2-ac95df491f94",
+      "profile_id": "local-profile",
+      "meal_name": "Double chicken roll",
+      "calories": 379,
+      "protein": 29,
+      "is_outside_food": false,
+      "outside_calories": 0,
+      "consumed_on": "2026-03-27",
+      "created_at": "2026-03-27T08:24:41.182Z"
+    }
+  ],
+  "weekly_plan": [
+    {
+      "id": "local-profile-Monday-Breakfast",
+      "profile_id": "local-profile",
+      "day": "Monday",
+      "slot": "Breakfast",
+      "meal_name": "",
+      "ingredients": [],
+      "updated_at": "2026-03-27T08:24:49.482Z"
+    }
+  ],
+  "saved_foods": [],
+  "quick_bundles": []
+}

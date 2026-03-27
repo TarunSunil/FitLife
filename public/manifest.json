@@ -1,0 +1,16 @@
+{
+  "name": "Obsidian Fitness Tracker",
+  "short_name": "ObsidianFit",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "description": "Adaptive fitness tracking driven by gym and kitchen environment settings.",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    }
+  ]
+}
