@@ -49,9 +49,9 @@ export default function ProgressCharts({ profile, logs, mealLogs }: ProgressChar
           <span>Training Volume</span>
           <span>{logs.length} logged sets</span>
         </div>
-        <div className="h-56">
+        <div className="h-56 min-w-0">
           {mounted ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={220}>
               <LineChart data={trainingData} margin={{ top: 5, right: 8, left: -12, bottom: 5 }}>
                 <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
@@ -89,9 +89,9 @@ export default function ProgressCharts({ profile, logs, mealLogs }: ProgressChar
           <span>Calories Intake</span>
           <span>Target: {profile.target_calories}</span>
         </div>
-        <div className="h-56">
+        <div className="h-56 min-w-0">
           {mounted ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={220}>
               <LineChart data={nutritionData} margin={{ top: 5, right: 8, left: -12, bottom: 5 }}>
                 <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
@@ -123,9 +123,9 @@ export default function ProgressCharts({ profile, logs, mealLogs }: ProgressChar
           <span>Protein Intake</span>
           <span>Target: {profile.target_protein}g</span>
         </div>
-        <div className="h-56">
+        <div className="h-56 min-w-0">
           {mounted ? (
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={240} minHeight={220}>
               <LineChart data={nutritionData} margin={{ top: 5, right: 8, left: -12, bottom: 5 }}>
                 <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />

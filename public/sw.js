@@ -1,17 +1,9 @@
-const CACHE_NAME = "obsidian-fit-cache-v1";
-const APP_SHELL = [
-  "/",
-  "/settings",
-  "/workout-logger",
-  "/workout-logs",
-  "/diet",
-  "/manifest.json",
-  "/favicon.ico",
-];
+const CACHE_NAME = "obsidian-fit-cache-v2";
+const STATIC_ASSETS = ["/", "/manifest.json", "/favicon.ico"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)),
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
   );
 });
 
@@ -32,6 +24,24 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const requestUrl = new URL(event.request.url);
+
+  // Always prefer network for page navigations so Server Action payloads stay fresh after deploys.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match("/")),
+    );
+    return;
+  }
+
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  const isCacheableStatic =
+    requestUrl.pathname.startsWith("/_next/") || STATIC_ASSETS.includes(requestUrl.pathname);
+
+  if (!isSameOrigin || !isCacheableStatic) {
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -40,11 +50,13 @@ self.addEventListener("fetch", (event) => {
 
       return fetch(event.request)
         .then((networkResponse) => {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          if (networkResponse.ok) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+          }
           return networkResponse;
         })
-        .catch(() => caches.match("/"));
+        .catch(() => caches.match(event.request));
     }),
   );
 });

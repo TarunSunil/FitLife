@@ -96,20 +96,21 @@ export default function SettingsPage({ profile, onProfileChange }: SettingsPageP
 
         if (!result.ok || !result.profile) {
           setError(result.error ?? "Unable to save settings");
-          enqueue({
-            type: "settings",
-            payload: draft,
-          });
           return;
         }
 
         onProfileChange(result.profile);
       } catch {
-        enqueue({
-          type: "settings",
-          payload: draft,
-        });
-        setError("Offline: queued settings change for sync");
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "settings",
+            payload: draft,
+          });
+          setError("Offline: queued settings change for sync");
+          return;
+        }
+
+        setError("Unable to save settings right now. Please try again.");
       }
     });
   };

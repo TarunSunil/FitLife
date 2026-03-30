@@ -19,7 +19,17 @@ import type {
   WeeklyPlanEntry,
 } from "@/lib/types/nutrition";
 
-const DB_PATH = path.join(process.cwd(), "data", "fitness-db.json");
+const DB_PATH =
+  process.env.FITNESS_DB_PATH ??
+  (process.env.VERCEL
+    ? path.join("/tmp", "fitness-db.json")
+    : path.join(process.cwd(), "data", "fitness-db.json"));
+
+const globalStore = globalThis as typeof globalThis & {
+  __FITNESS_MEMORY_DB__?: FitnessDatabase;
+};
+
+let useInMemoryStore = false;
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -114,7 +124,34 @@ function normalizePlanEntry(entry: Partial<WeeklyPlanEntry>): WeeklyPlanEntry {
   };
 }
 
+function createSeededDb(): FitnessDatabase {
+  return {
+    profiles: [DEFAULT_PROFILE],
+    workout_logs: [],
+    meal_logs: [],
+    weekly_plan: [],
+    saved_foods: [],
+    quick_bundles: [],
+  };
+}
+
+function getMemoryDb(): FitnessDatabase {
+  if (!globalStore.__FITNESS_MEMORY_DB__) {
+    globalStore.__FITNESS_MEMORY_DB__ = createSeededDb();
+  }
+
+  return globalStore.__FITNESS_MEMORY_DB__;
+}
+
+function setMemoryDb(db: FitnessDatabase) {
+  globalStore.__FITNESS_MEMORY_DB__ = db;
+}
+
 async function ensureDb(): Promise<FitnessDatabase> {
+  if (useInMemoryStore) {
+    return getMemoryDb();
+  }
+
   try {
     const content = await readFile(DB_PATH, "utf8");
     const parsed = JSON.parse(content) as Partial<FitnessDatabase>;
@@ -135,24 +172,33 @@ async function ensureDb(): Promise<FitnessDatabase> {
 
     return normalized;
   } catch {
-    await mkdir(path.dirname(DB_PATH), { recursive: true });
+    const seededDb = createSeededDb();
 
-    const seededDb: FitnessDatabase = {
-      profiles: [DEFAULT_PROFILE],
-      workout_logs: [],
-      meal_logs: [],
-      weekly_plan: [],
-      saved_foods: [],
-      quick_bundles: [],
-    };
-
-    await writeFile(DB_PATH, JSON.stringify(seededDb, null, 2), "utf8");
-    return seededDb;
+    try {
+      await mkdir(path.dirname(DB_PATH), { recursive: true });
+      await writeFile(DB_PATH, JSON.stringify(seededDb, null, 2), "utf8");
+      return seededDb;
+    } catch {
+      useInMemoryStore = true;
+      setMemoryDb(seededDb);
+      return getMemoryDb();
+    }
   }
 }
 
 async function persistDb(db: FitnessDatabase) {
-  await writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
+  if (useInMemoryStore) {
+    setMemoryDb(db);
+    return;
+  }
+
+  try {
+    await mkdir(path.dirname(DB_PATH), { recursive: true });
+    await writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
+  } catch {
+    useInMemoryStore = true;
+    setMemoryDb(db);
+  }
 }
 
 export async function getProfile(): Promise<FitnessProfile> {
