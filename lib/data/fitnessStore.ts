@@ -27,9 +27,10 @@ const DB_PATH =
 
 const globalStore = globalThis as typeof globalThis & {
   __FITNESS_MEMORY_DB__?: FitnessDatabase;
+  __FITNESS_STORE_MODE__?: "file" | "memory";
 };
 
-let useInMemoryStore = false;
+let dbInitialized = false;
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -148,10 +149,6 @@ function setMemoryDb(db: FitnessDatabase) {
 }
 
 async function ensureDb(): Promise<FitnessDatabase> {
-  if (useInMemoryStore) {
-    return getMemoryDb();
-  }
-
   try {
     const content = await readFile(DB_PATH, "utf8");
     const parsed = JSON.parse(content) as Partial<FitnessDatabase>;
@@ -170,16 +167,22 @@ async function ensureDb(): Promise<FitnessDatabase> {
       await writeFile(DB_PATH, JSON.stringify(normalized, null, 2), "utf8");
     }
 
+    globalStore.__FITNESS_STORE_MODE__ = "file";
+    dbInitialized = true;
     return normalized;
   } catch {
+    // Try to create new database file
     const seededDb = createSeededDb();
 
     try {
       await mkdir(path.dirname(DB_PATH), { recursive: true });
       await writeFile(DB_PATH, JSON.stringify(seededDb, null, 2), "utf8");
+      globalStore.__FITNESS_STORE_MODE__ = "file";
+      dbInitialized = true;
       return seededDb;
     } catch {
-      useInMemoryStore = true;
+      // Fallback to memory storage, but always try file first on next init
+      globalStore.__FITNESS_STORE_MODE__ = "memory";
       setMemoryDb(seededDb);
       return getMemoryDb();
     }
@@ -187,17 +190,17 @@ async function ensureDb(): Promise<FitnessDatabase> {
 }
 
 async function persistDb(db: FitnessDatabase) {
-  if (useInMemoryStore) {
-    setMemoryDb(db);
-    return;
-  }
+  // Always update in-memory cache
+  setMemoryDb(db);
 
+  // Try to persist to file
   try {
     await mkdir(path.dirname(DB_PATH), { recursive: true });
     await writeFile(DB_PATH, JSON.stringify(db, null, 2), "utf8");
+    globalStore.__FITNESS_STORE_MODE__ = "file";
   } catch {
-    useInMemoryStore = true;
-    setMemoryDb(db);
+    // If file write fails, stay in memory but don't crash
+    globalStore.__FITNESS_STORE_MODE__ = "memory";
   }
 }
 

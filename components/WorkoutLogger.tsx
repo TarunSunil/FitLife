@@ -58,28 +58,32 @@ export default function WorkoutLogger({ profile, onLogAdded }: WorkoutLoggerProp
         onLogAdded(result.log);
         setMessage(result.tempoRequired ? "Tempo priority mode active" : "Workout saved");
       } catch {
-        enqueue({
-          type: "workout",
-          payload: {
-            exercise,
-            weight_kg: weightKg,
-            reps,
-            tempo,
-          },
-          profile: {
-            has_squat_rack: profile.has_squat_rack,
-            has_pullup_bar: profile.has_pullup_bar,
-            has_bench: profile.has_bench,
-            has_fridge: profile.has_fridge,
-            has_kettle: profile.has_kettle,
-            max_db_weight_kg: profile.max_db_weight_kg,
-            target_calories: profile.target_calories,
-            target_protein: profile.target_protein,
-            hidden_calorie_buffer_percent: profile.hidden_calorie_buffer_percent,
-          },
-        });
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "workout",
+            payload: {
+              exercise,
+              weight_kg: weightKg,
+              reps,
+              tempo,
+            },
+            profile: {
+              has_squat_rack: profile.has_squat_rack,
+              has_pullup_bar: profile.has_pullup_bar,
+              has_bench: profile.has_bench,
+              has_fridge: profile.has_fridge,
+              has_kettle: profile.has_kettle,
+              max_db_weight_kg: profile.max_db_weight_kg,
+              target_calories: profile.target_calories,
+              target_protein: profile.target_protein,
+              hidden_calorie_buffer_percent: profile.hidden_calorie_buffer_percent,
+            },
+          });
+          setMessage("Offline: workout queued for sync");
+          return;
+        }
 
-        setMessage("Offline: workout queued for sync");
+        setMessage("Unable to save workout right now. Please try again.");
       }
     });
   };

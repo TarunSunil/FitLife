@@ -166,20 +166,27 @@ export default function DietPlanPage({
         setMealOutsideFood(false);
         setMessage("Meal saved");
       } catch {
-        enqueue({
-          type: "meal",
-          payload: {
-            meal_name: mealName,
-            calories: mealCalories,
-            protein: mealProtein,
-            is_outside_food: mealOutsideFood,
-            outside_calories: outsideCalories,
-            consumed_on: selectedDate,
-          },
-        });
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "meal",
+            payload: {
+              meal_name: mealName,
+              calories: mealCalories,
+              protein: mealProtein,
+              is_outside_food: mealOutsideFood,
+              outside_calories: outsideCalories,
+              consumed_on: selectedDate,
+            },
+          });
+          setMealName("");
+          setMealOutsideFood(false);
+          setMessage("Offline: meal queued for sync");
+          return;
+        }
+
         setMealName("");
         setMealOutsideFood(false);
-        setMessage("Offline: meal queued for sync");
+        setMessage("Unable to save meal right now. Please try again.");
       }
     });
   };
@@ -206,18 +213,25 @@ export default function DietPlanPage({
         setSavedFoodOutside(false);
         setMessage("Saved food added");
       } catch {
-        enqueue({
-          type: "saved-food",
-          payload: {
-            name: savedFoodName,
-            calories: savedFoodCalories,
-            protein: savedFoodProtein,
-            is_outside_food: savedFoodOutside,
-          },
-        });
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "saved-food",
+            payload: {
+              name: savedFoodName,
+              calories: savedFoodCalories,
+              protein: savedFoodProtein,
+              is_outside_food: savedFoodOutside,
+            },
+          });
+          setSavedFoodName("");
+          setSavedFoodOutside(false);
+          setMessage("Offline: saved food queued for sync");
+          return;
+        }
+
         setSavedFoodName("");
         setSavedFoodOutside(false);
-        setMessage("Offline: saved food queued for sync");
+        setMessage("Unable to save food right now. Please try again.");
       }
     });
   };
@@ -273,15 +287,21 @@ export default function DietPlanPage({
         setBundleName("");
         setMessage("Quick bundle saved");
       } catch {
-        enqueue({
-          type: "quick-bundle",
-          payload: {
-            name: bundleName.trim() || `Quick Bundle (${selectedFoodIds.length})`,
-            item_ids: selectedFoodIds,
-          },
-        });
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "quick-bundle",
+            payload: {
+              name: bundleName.trim() || `Quick Bundle (${selectedFoodIds.length})`,
+              item_ids: selectedFoodIds,
+            },
+          });
+          setBundleName("");
+          setMessage("Offline: quick bundle queued for sync");
+          return;
+        }
+
         setBundleName("");
-        setMessage("Offline: quick bundle queued for sync");
+        setMessage("Unable to save bundle right now. Please try again.");
       }
     });
   };
@@ -310,15 +330,20 @@ export default function DietPlanPage({
         onMealAdded(result.meal);
         setMessage("Quick bundle logged");
       } catch {
-        enqueue({
-          type: "quick-selection-log",
-          payload: {
-            item_ids: selectedFoodIds,
-            consumed_on: selectedDate,
-            bundle_name: bundleName.trim() || undefined,
-          },
-        });
-        setMessage("Offline: quick selection log queued for sync");
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "quick-selection-log",
+            payload: {
+              item_ids: selectedFoodIds,
+              consumed_on: selectedDate,
+              bundle_name: bundleName.trim() || undefined,
+            },
+          });
+          setMessage("Offline: quick selection log queued for sync");
+          return;
+        }
+
+        setMessage("Unable to log selection right now. Please try again.");
       }
     });
   };
@@ -341,14 +366,19 @@ export default function DietPlanPage({
         onMealAdded(result.meal);
         setMessage("Quick bundle logged");
       } catch {
-        enqueue({
-          type: "quick-bundle-log",
-          payload: {
-            bundle_id: bundleId,
-            consumed_on: selectedDate,
-          },
-        });
-        setMessage("Offline: quick bundle log queued for sync");
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "quick-bundle-log",
+            payload: {
+              bundle_id: bundleId,
+              consumed_on: selectedDate,
+            },
+          });
+          setMessage("Offline: quick bundle log queued for sync");
+          return;
+        }
+
+        setMessage("Unable to log bundle right now. Please try again.");
       }
     });
   };
@@ -410,16 +440,21 @@ export default function DietPlanPage({
         onPlanUpserted(result.entry);
         setMessage("Weekly planner updated");
       } catch {
-        enqueue({
-          type: "weekly-plan",
-          payload: {
-            day: plannerDay,
-            slot: plannerSlot,
-            meal_name: plannerMealName,
-            ingredients,
-          },
-        });
-        setMessage("Offline: planner entry queued for sync");
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          enqueue({
+            type: "weekly-plan",
+            payload: {
+              day: plannerDay,
+              slot: plannerSlot,
+              meal_name: plannerMealName,
+              ingredients,
+            },
+          });
+          setMessage("Offline: planner entry queued for sync");
+          return;
+        }
+
+        setMessage("Unable to update plan right now. Please try again.");
       }
     });
   };
