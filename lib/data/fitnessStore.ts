@@ -136,6 +136,32 @@ function createSeededDb(): FitnessDatabase {
   };
 }
 
+export async function uploadTempImage(file: File, fileId: string): Promise<string | null> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null; // local mode fallback
+
+  const res = await supabase.storage.from("temp_uploads").upload(fileId, file, { upsert: true });
+  if (res.error) {
+    if (res.error.message.includes("not found") || res.error.message.includes("Bucket")) {
+      // Create bucket on-the-fly if needed during dev, or handle graceful fail
+      await supabase.storage.createBucket("temp_uploads", { public: false });
+      const retry = await supabase.storage.from("temp_uploads").upload(fileId, file, { upsert: true });
+      if (retry.error) return null;
+    } else {
+      return null;
+    }
+  }
+  return fileId;
+}
+
+export async function deleteTempImage(fileId: string): Promise<boolean> {
+  const supabase = getSupabaseClient();
+  if (!supabase) return false;
+
+  const res = await supabase.storage.from("temp_uploads").remove([fileId]);
+  return !res.error;
+}
+
 function getMemoryDb(): FitnessDatabase {
   if (!globalStore.__FITNESS_MEMORY_DB__) {
     globalStore.__FITNESS_MEMORY_DB__ = createSeededDb();
@@ -218,9 +244,14 @@ export async function getProfile(): Promise<FitnessProfile> {
       return normalizeProfile(data as Partial<FitnessProfile>);
     }
 
-    const seededProfile = normalizeProfile(DEFAULT_PROFILE);
-    await supabase.from("profiles").upsert(seededProfile);
-    return seededProfile;
+    if (!error && !data) {
+      const seededProfile = normalizeProfile(DEFAULT_PROFILE);
+      const { error: upsertError } = await supabase.from("profiles").upsert(seededProfile);
+
+      if (!upsertError) {
+        return seededProfile;
+      }
+    }
   }
 
   const db = await ensureDb();
@@ -355,8 +386,6 @@ export async function updateProfile(
     if (!error && data) {
       return normalizeProfile(data as Partial<FitnessProfile>);
     }
-
-    return updated;
   }
 
   const db = await ensureDb();

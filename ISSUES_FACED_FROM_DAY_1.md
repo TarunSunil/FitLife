@@ -30,6 +30,24 @@ Updated `lib/data/fitnessStore.ts` to:
 
 ### Status: ✅ FIXED
 
+### Reopened (2026-03-30): Additional Stability Work
+
+**User report:**
+- Setting max dumbbell weight can still revert after save/navigation in some sessions.
+- Expected: updates should be instant and consistent across tabs/pages.
+
+**Additional Fixes Implemented:**
+1. `lib/data/fitnessStore.ts`: `getProfile()` now falls back safely when Supabase read fails, instead of returning seeded defaults.
+2. `lib/data/fitnessStore.ts`: `updateProfile()` no longer returns optimistic data on Supabase write error; it continues to local persistence fallback.
+3. `components/FitnessShell.tsx`: Added profile sync via localStorage key `fitlife:profile` and `storage` listener for instant cross-tab updates.
+4. `components/FitnessShell.tsx`: On mount, prefer the newest profile by `updated_at` to avoid stale initial payload overwrite.
+5. `components/SettingsPage.tsx`: Added profile-to-draft sync effect so settings inputs reflect latest profile state.
+
+**Next Fallback Plan (if still reproducible):**
+1. Mark pages as dynamic to bypass route cache.
+2. Add temporary save/read instrumentation around settings action.
+3. Confirm active env data source and Supabase table/read health.
+
 ---
 
 ## Issue #2: Settings Save Shows "Offline: Queued..." When Online ❌ FIXED

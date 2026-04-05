@@ -64,6 +64,28 @@ The in-memory storage fallback was permanently locking the database into memory 
 - Settings save now persists correctly
 - Build completed successfully after fix
 
+### Reopened (2026-03-30): Still Reverting in UI
+
+**Observed by user:**
+- Changing max weight in Settings can still snap back to old value after refresh/navigation.
+- Expected behavior: value updates instantly across all browser tabs/pages.
+
+**Fixes Tried So Far (historical + current):**
+1. Reworked file/memory fallback behavior in `fitnessStore` (previous fix).
+2. Updated service worker to network-first for navigation and cache version bump (previous fix).
+3. Forced service worker update checks in registrar (previous fix).
+4. Hardened Supabase fallback in `getProfile()` so Supabase read errors no longer seed/reset defaults.
+5. Hardened Supabase fallback in `updateProfile()` so failed Supabase writes continue to local persistence path.
+6. Added profile sync via localStorage + `storage` event in `FitnessShell` for instant cross-tab propagation.
+7. Added freshest-profile preference on mount to avoid stale initial route payload overriding recent changes.
+8. Synced `SettingsPage` draft state from incoming `profile` updates so UI reflects the current canonical profile.
+
+**Fixes To Try Next (if issue persists):**
+1. Add explicit route dynamic rendering (`dynamic = "force-dynamic"`) for affected pages to eliminate stale server route cache.
+2. Add a lightweight `getProfileAction()` fetch after save and compare timestamps to detect stale refresh source.
+3. Add optional temporary debug logging for settings save payload/result/store mode to pinpoint environment-specific failure.
+4. Verify runtime env source (`.env.local`, host vars) to confirm whether Supabase path or local JSON path is active.
+
 ---
 
 ## Issue 3: Multiple Lockfiles Warning

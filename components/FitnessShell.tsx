@@ -30,6 +30,26 @@ import type {
   WeeklyPlanEntry,
 } from "@/lib/types/nutrition";
 
+const PROFILE_SYNC_KEY = "fitlife:profile";
+
+function readStoredProfile(): FitnessProfile | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PROFILE_SYNC_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as FitnessProfile;
+  } catch {
+    return null;
+  }
+}
+
 type FitnessShellProps = {
   initialProfile: FitnessProfile;
   initialLogs: WorkoutLog[];
@@ -62,6 +82,62 @@ export default function FitnessShell({
   const [quickBundles, setQuickBundles] = useState(initialQuickBundles);
   const [isOnline, setIsOnline] = useState(true);
   const [syncStatus, setSyncStatus] = useState("Synced");
+
+  const syncProfile = useCallback((nextProfile: FitnessProfile) => {
+    setProfile(nextProfile);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PROFILE_SYNC_KEY, JSON.stringify(nextProfile));
+    }
+  }, []);
+
+  useEffect(() => {
+    const storedProfile = readStoredProfile();
+
+    if (!storedProfile) {
+      return;
+    }
+
+    const incomingTimestamp = Date.parse(storedProfile.updated_at);
+    const currentTimestamp = Date.parse(initialProfile.updated_at);
+
+    if (!Number.isNaN(incomingTimestamp) && incomingTimestamp > currentTimestamp) {
+      setProfile(storedProfile);
+      return;
+    }
+
+    setProfile(initialProfile);
+  }, [initialProfile]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== PROFILE_SYNC_KEY || !event.newValue) {
+        return;
+      }
+
+      try {
+        const nextProfile = JSON.parse(event.newValue) as FitnessProfile;
+        setProfile((current) => {
+          const nextTimestamp = Date.parse(nextProfile.updated_at);
+          const currentTimestamp = Date.parse(current.updated_at);
+
+          if (!Number.isNaN(nextTimestamp) && !Number.isNaN(currentTimestamp)) {
+            return nextTimestamp >= currentTimestamp ? nextProfile : current;
+          }
+
+          return nextProfile;
+        });
+      } catch {
+        // Ignore malformed storage payloads.
+      }
+    };
+
+    window.addEventListener("storage", onStorage);
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   const syncOfflineQueue = useCallback(async () => {
     const queue = readQueue();
@@ -268,7 +344,7 @@ export default function FitnessShell({
 
       {mode === "settings" ? (
         <div className="mx-auto max-w-2xl px-4 pb-24 pt-6">
-          <SettingsPage profile={profile} onProfileChange={setProfile} />
+          <SettingsPage profile={profile} onProfileChange={syncProfile} />
         </div>
       ) : null}
 

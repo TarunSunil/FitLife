@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Dumbbell, Flame, Refrigerator, Target, ThermometerSun } from "lucide-react";
 
 import { updateSettingsAction } from "@/app/actions";
@@ -69,6 +69,20 @@ export default function SettingsPage({ profile, onProfileChange }: SettingsPageP
     target_protein: profile.target_protein,
     hidden_calorie_buffer_percent: profile.hidden_calorie_buffer_percent,
   });
+
+  useEffect(() => {
+    setDraft({
+      has_squat_rack: profile.has_squat_rack,
+      has_pullup_bar: profile.has_pullup_bar,
+      has_bench: profile.has_bench,
+      has_fridge: profile.has_fridge,
+      has_kettle: profile.has_kettle,
+      max_db_weight_kg: profile.max_db_weight_kg,
+      target_calories: profile.target_calories,
+      target_protein: profile.target_protein,
+      hidden_calorie_buffer_percent: profile.hidden_calorie_buffer_percent,
+    });
+  }, [profile]);
 
   const shoppingItems = useMemo(
     () => getShoppingList({ ...profile, ...draft }),

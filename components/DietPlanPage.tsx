@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ChefHat, Layers, ListPlus, PackagePlus, Trash2 } from "lucide-react";
+import { ChefHat, Layers, ListPlus, PackagePlus, Trash2, Upload, Camera } from "lucide-react";
 
 import {
   addQuickBundleAction,
@@ -13,6 +13,7 @@ import {
   logQuickBundleAction,
   logQuickSelectionAction,
   upsertWeeklyPlanEntryAction,
+  analyzeMealImageAction,
 } from "@/app/actions";
 import {
   buildDietShoppingList,
@@ -86,6 +87,15 @@ export default function DietPlanPage({
   const [savedFoodOutside, setSavedFoodOutside] = useState(false);
   const [bundleName, setBundleName] = useState("");
   const [selectedFoodIds, setSelectedFoodIds] = useState<string[]>([]);
+  
+  const [analyzingImg, setAnalyzingImg] = useState(false);
+  const [verificationData, setVerificationData] = useState<{
+    mealName: string;
+    calories: number;
+    protein: number;
+    ingredients: string;
+    confidence: "High" | "Low";
+  } | null>(null);
 
   const [plannerDay, setPlannerDay] = useState<(typeof DAYS)[number]>("Monday");
   const [plannerSlot, setPlannerSlot] = useState<(typeof SLOTS)[number]>("Breakfast");
@@ -415,6 +425,80 @@ export default function DietPlanPage({
     });
   };
 
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setAnalyzingImg(true);
+    setMessage("Analyzing your meal...");
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    startTransition(async () => {
+      try {
+        const result = await analyzeMealImageAction(formData);
+
+        if (!result.ok || !result.data) {
+          setMessage(result.error ?? "Unable to analyze meal image");
+          return;
+        }
+
+        setVerificationData(result.data);
+        setMessage("Analysis complete");
+      } catch (err) {
+        setMessage("Unable to process image right now. Please try again.");
+      } finally {
+        setAnalyzingImg(false);
+      }
+    });
+
+    event.target.value = ""; // Reset input so same file can be uploaded again
+  };
+
+  const confirmVerifiedMeal = () => {
+    if (!verificationData) return;
+    
+    // Autofill and submit
+    setMealName(verificationData.mealName);
+    setMealCalories(verificationData.calories);
+    setMealProtein(verificationData.protein);
+    setMealOutsideFood(false); // Can be adjusted by user later
+    
+    // We do a manual enqueue and dispatch OR save directly.
+    startTransition(async () => {
+      try {
+        const result = await addMealLogAction({
+          meal_name: verificationData.mealName,
+          calories: verificationData.calories,
+          protein: verificationData.protein,
+          is_outside_food: false,
+          outside_calories: 0,
+          consumed_on: selectedDate,
+        });
+
+        if (result.ok && result.meal) {
+          onMealAdded(result.meal);
+          setMessage("Meal saved via Quick Log");
+        } else {
+          setMessage(result.error ?? "Unable to auto-save quick log");
+        }
+      } finally {
+        setVerificationData(null);
+      }
+    });
+  };
+
+  const rejectVerifiedMeal = () => {
+    if (!verificationData) return;
+    // Just map to inputs and hide dialog so user can edit
+    setMealName(verificationData.mealName);
+    setMealCalories(verificationData.calories);
+    setMealProtein(verificationData.protein);
+    setMessage("Auto-fill complete. Please review inputs.");
+    setVerificationData(null);
+  };
+
   const savePlan = () => {
     const ingredients = plannerIngredients
       .split(",")
@@ -461,6 +545,41 @@ export default function DietPlanPage({
 
   return (
     <section className="space-y-4 rounded-2xl border border-white/10 bg-zinc-950/80 p-4">
+      {verificationData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white mb-2">Verification Prompt</h3>
+            {verificationData.confidence === "Low" ? (
+             <p className="text-amber-400 text-xs mb-3 font-semibold">Low Confidence. Please verify this dish.</p>
+            ) : null}
+            <p className="text-sm text-zinc-300">
+              Is this <strong>{verificationData.mealName}</strong>?
+            </p>
+            <div className="my-4 rounded border border-white/10 bg-black p-3 text-xs text-zinc-400">
+              <p>Calories: {verificationData.calories} kcal</p>
+              <p>Protein: {verificationData.protein}g</p>
+              <p className="mt-1 wrap-break-word">Identified: {verificationData.ingredients}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={confirmVerifiedMeal}
+                className="flex-1 rounded-md bg-lime-500 py-2 text-sm font-semibold text-black transition hover:bg-lime-400"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={rejectVerifiedMeal}
+                className="flex-1 rounded-md border border-white/10 bg-zinc-800 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
+              >
+                No, I'll type it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="space-y-1">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
           <ChefHat className="h-4 w-4" />
@@ -473,7 +592,14 @@ export default function DietPlanPage({
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
-          <h3 className="text-sm font-semibold text-zinc-200">Daily Meal Logger</h3>
+          <h3 className="flex items-center justify-between text-sm font-semibold text-zinc-200">
+            <span>Daily Meal Logger</span>
+            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs transition ${analyzingImg ? 'border-lime-500/40 bg-lime-500/10 text-lime-400 cursor-not-allowed' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}>
+              {analyzingImg ? <Camera className="h-4 w-4 animate-pulse" /> : <Upload className="h-4 w-4" />}
+              {analyzingImg ? "Analyzing..." : "Quick Log"}
+              <input type="file" className="hidden" accept=".jpg,.png,.heic,.heif,.webp" onChange={handleImageUpload} disabled={analyzingImg} />
+            </label>
+          </h3>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="text-xs text-zinc-400">
               Date

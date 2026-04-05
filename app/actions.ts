@@ -17,6 +17,8 @@ import {
   updateProfile,
   updateWorkoutLog,
   upsertWeeklyPlanEntry,
+  uploadTempImage,
+  deleteTempImage,
 } from "@/lib/data/fitnessStore";
 import { isTempoRequired } from "@/lib/domain/profileRules";
 import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
@@ -150,6 +152,54 @@ export type QuickBundleLogActionResult = {
   meal?: MealLog;
   error?: string;
 };
+
+export type AnalyzeMealResult = {
+  ok: boolean;
+  error?: string;
+  data?: {
+    mealName: string;
+    calories: number;
+    protein: number;
+    ingredients: string;
+    confidence: "High" | "Low";
+  };
+};
+
+export async function analyzeMealImageAction(formData: FormData): Promise<AnalyzeMealResult> {
+  const file = formData.get("image") as File | null;
+  if (!file) return { ok: false, error: "No image file provided" };
+
+  const mimeType = file.type;
+  if (!["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp"].includes(mimeType)) {
+    return { ok: false, error: "Unsupported image format" };
+  }
+
+  const fileId = crypto.randomUUID() + "-" + file.name;
+  let isUploaded = false;
+
+  try {
+    // 1. Storage - Upload to temp directory
+    const uploadRes = await uploadTempImage(file, fileId);
+    if (uploadRes) isUploaded = true;
+
+    // 2. AI Pipeline
+    const arrayBuffer = await file.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+    // Dynamic import to avoid bloating client builds
+    const { analyzeMealWithAIs } = await import("@/lib/domain/mealAnalyzer");
+    const result = await analyzeMealWithAIs(base64, mimeType);
+
+    return { ok: true, data: result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "AI Analysis failed" };
+  } finally {
+    // 3. Cleanup (Discard on Success/Failure)
+    if (isUploaded) {
+      await deleteTempImage(fileId);
+    }
+  }
+}
 
 export async function updateSettingsAction(
   payload: z.infer<typeof profileSchema>,
