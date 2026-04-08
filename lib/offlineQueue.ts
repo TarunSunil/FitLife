@@ -38,28 +38,6 @@ export type OfflineQueueItem =
       };
     }
   | {
-      type: "quick-bundle";
-      payload: {
-        name: string;
-        item_ids: string[];
-      };
-    }
-  | {
-      type: "quick-bundle-log";
-      payload: {
-        bundle_id: string;
-        consumed_on: string;
-      };
-    }
-  | {
-      type: "quick-selection-log";
-      payload: {
-        item_ids: string[];
-        consumed_on: string;
-        bundle_name?: string;
-      };
-    }
-  | {
       type: "weekly-plan";
       payload: {
         day: "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";

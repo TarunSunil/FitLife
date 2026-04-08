@@ -10,6 +10,14 @@ export type MealLog = {
   created_at: string;
 };
 
+export type AnalyzedNutritionItem = {
+  name: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fats: number;
+};
+
 export type SavedFoodItem = {
   id: string;
   profile_id: string;

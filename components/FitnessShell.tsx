@@ -23,12 +23,7 @@ import WorkoutLogsList from "@/components/WorkoutLogsList";
 import WorkoutLogger from "@/components/WorkoutLogger";
 import { clearQueue, readQueue } from "@/lib/offlineQueue";
 import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
-import type {
-  MealLog,
-  QuickBundle,
-  SavedFoodItem,
-  WeeklyPlanEntry,
-} from "@/lib/types/nutrition";
+import type { MealLog, WeeklyPlanEntry } from "@/lib/types/nutrition";
 
 const PROFILE_SYNC_KEY = "fitlife:profile";
 
@@ -55,8 +50,6 @@ type FitnessShellProps = {
   initialLogs: WorkoutLog[];
   initialMealLogs: MealLog[];
   initialWeeklyPlan: WeeklyPlanEntry[];
-  initialSavedFoods?: SavedFoodItem[];
-  initialQuickBundles?: QuickBundle[];
   mode:
     | "dashboard"
     | "settings"
@@ -70,16 +63,12 @@ export default function FitnessShell({
   initialLogs,
   initialMealLogs,
   initialWeeklyPlan,
-  initialSavedFoods = [],
-  initialQuickBundles = [],
   mode,
 }: FitnessShellProps) {
   const [profile, setProfile] = useState(initialProfile);
   const [logs, setLogs] = useState(initialLogs);
   const [mealLogs, setMealLogs] = useState(initialMealLogs);
   const [weeklyPlan, setWeeklyPlan] = useState(initialWeeklyPlan);
-  const [savedFoods, setSavedFoods] = useState(initialSavedFoods);
-  const [quickBundles, setQuickBundles] = useState(initialQuickBundles);
   const [isOnline, setIsOnline] = useState(true);
   const [syncStatus, setSyncStatus] = useState("Synced");
 
@@ -305,25 +294,9 @@ export default function FitnessShell({
             profile={profile}
             mealLogs={mealLogs}
             weeklyPlan={weeklyPlan}
-            savedFoods={savedFoods}
-            quickBundles={quickBundles}
             onMealAdded={(meal) => setMealLogs((current) => [meal, ...current])}
             onMealDeleted={(mealId) =>
               setMealLogs((current) => current.filter((meal) => meal.id !== mealId))
-            }
-            onSavedFoodAdded={(savedFood) =>
-              setSavedFoods((current) => [savedFood, ...current])
-            }
-            onSavedFoodDeleted={(savedFoodId) =>
-              setSavedFoods((current) => current.filter((food) => food.id !== savedFoodId))
-            }
-            onQuickBundleAdded={(bundle) =>
-              setQuickBundles((current) => [bundle, ...current])
-            }
-            onQuickBundleDeleted={(bundleId) =>
-              setQuickBundles((current) =>
-                current.filter((bundle) => bundle.id !== bundleId),
-              )
             }
             onPlanUpserted={(entry) =>
               setWeeklyPlan((current) => {
@@ -350,7 +323,7 @@ export default function FitnessShell({
 
       {mode === "dashboard" ? (
         <main className="min-h-screen px-4 pb-24 pt-6 md:px-6 md:pb-8 md:pt-8">
-          <div className="mx-auto max-w-[1500px] md:grid md:grid-cols-[1fr_1.2fr_1.2fr] md:gap-4">
+          <div className="mx-auto max-w-screen-2xl md:grid md:grid-cols-[1fr_1.2fr_1.2fr] md:gap-4">
             <div className="space-y-4">
               {statsPanel}
               {dashboardLinks}

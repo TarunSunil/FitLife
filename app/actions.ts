@@ -11,6 +11,7 @@ import {
   getQuickBundleById,
   getSavedFoodsByIds,
   insertQuickBundle,
+  insertMealNutritionItems,
   insertSavedFood,
   insertMealLog,
   insertWorkoutLog,
@@ -23,11 +24,42 @@ import {
 import { isTempoRequired } from "@/lib/domain/profileRules";
 import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
 import type {
+  AnalyzedNutritionItem,
   MealLog,
   QuickBundle,
   SavedFoodItem,
   WeeklyPlanEntry,
 } from "@/lib/types/nutrition";
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp"];
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const ANALYSIS_RATE_WINDOW_MS = 60_000;
+const ANALYSIS_RATE_LIMIT = 10;
+
+const globalRateStore = globalThis as typeof globalThis & {
+  __MEAL_ANALYSIS_RATE__?: { windowStart: number; count: number };
+};
+
+function hitMealAnalysisRateLimit(): boolean {
+  const now = Date.now();
+  const existing = globalRateStore.__MEAL_ANALYSIS_RATE__;
+
+  if (!existing || now - existing.windowStart >= ANALYSIS_RATE_WINDOW_MS) {
+    globalRateStore.__MEAL_ANALYSIS_RATE__ = {
+      windowStart: now,
+      count: 1,
+    };
+
+    return false;
+  }
+
+  if (existing.count >= ANALYSIS_RATE_LIMIT) {
+    return true;
+  }
+
+  existing.count += 1;
+  return false;
+}
 
 const profileSchema = z.object({
   has_squat_rack: z.boolean(),
@@ -65,6 +97,18 @@ const mealSchema = z.object({
   is_outside_food: z.boolean().default(false),
   outside_calories: z.number().min(0).max(5000).optional(),
   consumed_on: z.string().min(10).max(10),
+  nutrition_items: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(80),
+        calories: z.number().min(0).max(3000),
+        protein: z.number().min(0).max(500),
+        carbs: z.number().min(0).max(1000),
+        fats: z.number().min(0).max(500),
+      }),
+    )
+    .max(25)
+    .optional(),
 });
 
 const savedFoodSchema = z.object({
@@ -162,6 +206,7 @@ export type AnalyzeMealResult = {
     protein: number;
     ingredients: string;
     confidence: "High" | "Low";
+    nutritionItems: AnalyzedNutritionItem[];
   };
 };
 
@@ -169,9 +214,23 @@ export async function analyzeMealImageAction(formData: FormData): Promise<Analyz
   const file = formData.get("image") as File | null;
   if (!file) return { ok: false, error: "No image file provided" };
 
+  if (hitMealAnalysisRateLimit()) {
+    return {
+      ok: false,
+      error: "Too many analysis requests. Please wait a minute and try again.",
+    };
+  }
+
   const mimeType = file.type;
-  if (!["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp"].includes(mimeType)) {
+  if (!ALLOWED_IMAGE_TYPES.includes(mimeType)) {
     return { ok: false, error: "Unsupported image format" };
+  }
+
+  if (file.size > MAX_IMAGE_BYTES) {
+    return {
+      ok: false,
+      error: "Image is too large. Please upload an image up to 8 MB.",
+    };
   }
 
   const fileId = crypto.randomUUID() + "-" + file.name;
@@ -181,6 +240,9 @@ export async function analyzeMealImageAction(formData: FormData): Promise<Analyz
     // 1. Storage - Upload to temp directory
     const uploadRes = await uploadTempImage(file, fileId);
     if (uploadRes) isUploaded = true;
+    else {
+      console.error("[meal-analyzer] temp upload failed before AI run", { fileId, mimeType, size: file.size });
+    }
 
     // 2. AI Pipeline
     const arrayBuffer = await file.arrayBuffer();
@@ -190,13 +252,27 @@ export async function analyzeMealImageAction(formData: FormData): Promise<Analyz
     const { analyzeMealWithAIs } = await import("@/lib/domain/mealAnalyzer");
     const result = await analyzeMealWithAIs(base64, mimeType);
 
+    console.log("[meal-analyzer] analysis success", {
+      fileId,
+      confidence: result.confidence,
+      mealName: result.mealName,
+    });
+
     return { ok: true, data: result };
   } catch (error) {
+    console.error("[meal-analyzer] analysis failure", {
+      fileId,
+      mimeType,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return { ok: false, error: error instanceof Error ? error.message : "AI Analysis failed" };
   } finally {
     // 3. Cleanup (Discard on Success/Failure)
     if (isUploaded) {
-      await deleteTempImage(fileId);
+      const deleted = await deleteTempImage(fileId);
+      if (!deleted) {
+        console.error("[meal-analyzer] temp cleanup failed", { fileId });
+      }
     }
   }
 }
@@ -317,6 +393,10 @@ export async function addMealLogAction(
     ...parsed.data,
     outside_calories: outsideCalories,
   });
+
+  if (meal && parsed.data.nutrition_items?.length) {
+    await insertMealNutritionItems(meal.id, parsed.data.nutrition_items);
+  }
 
   revalidatePath("/");
   revalidatePath("/diet");

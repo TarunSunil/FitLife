@@ -1,10 +1,22 @@
 import { z } from "zod";
+import type { AnalyzedNutritionItem } from "@/lib/types/nutrition";
 
 const nutritionSchema = z.object({
   calories: z.number(),
   protein: z.number(),
   carbs: z.number(),
   fats: z.number(),
+  items: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        calories: z.number(),
+        protein: z.number(),
+        carbs: z.number(),
+        fats: z.number(),
+      }),
+    )
+    .optional(),
 });
 
 export type AnalyzedMeal = {
@@ -13,7 +25,83 @@ export type AnalyzedMeal = {
   protein: number;
   ingredients: string;
   confidence: "High" | "Low";
+  nutritionItems: AnalyzedNutritionItem[];
 };
+
+const RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function fetchGeminiWithRetry(
+  url: string,
+  body: object,
+  stage: "vision" | "nutrition",
+): Promise<Response> {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (response.ok) {
+        clearTimeout(timeoutId);
+        return response;
+      }
+
+      const bodyText = await response.text();
+      console.error(`[meal-analyzer] ${stage} call failed`, {
+        stage,
+        status: response.status,
+        attempt,
+        body: bodyText.slice(0, 300),
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!RETRY_STATUSES.has(response.status) || attempt === maxAttempts) {
+        throw new Error(`Gemini ${stage} failed: ${bodyText || response.statusText}`);
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+      const isAbort = error instanceof Error && error.name === "AbortError";
+
+      console.error(`[meal-analyzer] ${stage} request exception`, {
+        stage,
+        attempt,
+        error: error instanceof Error ? error.message : String(error),
+        timeout: isAbort,
+      });
+
+      if (attempt === maxAttempts) {
+        if (isAbort) {
+          throw new Error("Image analysis timed out. Please try a smaller image or retry.");
+        }
+
+        throw new Error(
+          `Gemini ${stage} failed after retries: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        );
+      }
+    }
+
+    await sleep(300 * 2 ** (attempt - 1));
+  }
+
+  throw new Error("Unexpected analyzer retry flow state");
+}
 
 export async function analyzeMealWithAIs(base64Image: string, mimeType: string): Promise<AnalyzedMeal> {
   const GEMINI_VISION_KEY = process.env.GEMINI_API_KEY;
@@ -35,37 +123,29 @@ export async function analyzeMealWithAIs(base64Image: string, mimeType: string):
     }
   `;
 
-  const visionRes = await fetch(
+  const visionRes = await fetchGeminiWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_VISION_KEY}`,
     {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: visionPrompt },
-              {
-                inline_data: {
-                  mime_type: mimeType,
-                  data: base64Image,
-                },
+      contents: [
+        {
+          parts: [
+            { text: visionPrompt },
+            {
+              inline_data: {
+                mime_type: mimeType,
+                data: base64Image,
               },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
+            },
+          ],
         },
-      }),
-    }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+      },
+    },
+    "vision",
   );
-
-  if (!visionRes.ok) {
-    const errorText = await visionRes.text();
-    throw new Error(`Gemini Vision failed: ${errorText}`);
-  }
 
   const visionData = await visionRes.json();
   const visionOutput = visionData.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -83,7 +163,16 @@ export async function analyzeMealWithAIs(base64Image: string, mimeType: string):
       "calories": estimated total calories as a number,
       "protein": estimated total protein in grams as a number,
       "carbs": estimated total carbohydrates in grams as a number,
-      "fats": estimated total fats in grams as a number
+      "fats": estimated total fats in grams as a number,
+      "items": [
+        {
+          "name": "food component",
+          "calories": calories number,
+          "protein": protein grams number,
+          "carbs": carbs grams number,
+          "fats": fats grams number
+        }
+      ]
     }
     
     Use conservative estimates. For example:
@@ -93,31 +182,21 @@ export async function analyzeMealWithAIs(base64Image: string, mimeType: string):
     - Standard curry base (tomato gravy, onion, spices) per serving = ~30-50 cal, minimal protein
   `;
 
-  const nutritionRes = await fetch(
+  const nutritionRes = await fetchGeminiWithRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_NUTRITION_KEY}`,
     {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: nutritionPrompt },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: "application/json",
+      contents: [
+        {
+          parts: [{ text: nutritionPrompt }],
         },
-      }),
-    }
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        responseMimeType: "application/json",
+      },
+    },
+    "nutrition",
   );
-
-  if (!nutritionRes.ok) {
-    const errorText = await nutritionRes.text();
-    throw new Error(`Gemini Nutrition failed: ${errorText}`);
-  }
 
   const nutritionData = await nutritionRes.json();
   const nutritionOutput = nutritionData.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -126,11 +205,20 @@ export async function analyzeMealWithAIs(base64Image: string, mimeType: string):
   const nutrition = JSON.parse(nutritionOutput);
   const parsedNutrition = nutritionSchema.parse(nutrition);
 
+  const nutritionItems: AnalyzedNutritionItem[] = (parsedNutrition.items ?? []).map((item) => ({
+    name: item.name,
+    calories: Math.round(item.calories),
+    protein: Math.round(item.protein),
+    carbs: Math.round(item.carbs),
+    fats: Math.round(item.fats),
+  }));
+
   return {
     mealName: analysis.dishName,
     calories: Math.round(parsedNutrition.calories),
     protein: Math.round(parsedNutrition.protein),
     ingredients: analysis.ingredientsList,
     confidence: analysis.confidence,
+    nutritionItems,
   };
 }

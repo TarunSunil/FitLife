@@ -1,31 +1,23 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { ChefHat, Layers, ListPlus, PackagePlus, Trash2, Upload, Camera } from "lucide-react";
+import { Camera, ChefHat, ListPlus, PencilLine, Trash2, Upload } from "lucide-react";
 
 import {
-  addQuickBundleAction,
-  addSavedFoodAction,
   addMealLogAction,
-  deleteQuickBundleAction,
-  deleteSavedFoodAction,
-  deleteMealLogAction,
-  logQuickBundleAction,
-  logQuickSelectionAction,
-  upsertWeeklyPlanEntryAction,
   analyzeMealImageAction,
+  deleteMealLogAction,
+  upsertWeeklyPlanEntryAction,
 } from "@/app/actions";
 import {
   buildDietShoppingList,
-  getDietSuggestions,
   summarizeDailyMeals,
 } from "@/lib/domain/profileRules";
 import { enqueue } from "@/lib/offlineQueue";
 import type { FitnessProfile } from "@/lib/types/fitness";
 import type {
+  AnalyzedNutritionItem,
   MealLog,
-  QuickBundle,
-  SavedFoodItem,
   WeeklyPlanEntry,
 } from "@/lib/types/nutrition";
 
@@ -33,41 +25,42 @@ type DietPlanPageProps = {
   profile: FitnessProfile;
   mealLogs: MealLog[];
   weeklyPlan: WeeklyPlanEntry[];
-  savedFoods: SavedFoodItem[];
-  quickBundles: QuickBundle[];
   onMealAdded: (meal: MealLog) => void;
   onMealDeleted: (mealId: string) => void;
-  onSavedFoodAdded: (savedFood: SavedFoodItem) => void;
-  onSavedFoodDeleted: (savedFoodId: string) => void;
-  onQuickBundleAdded: (bundle: QuickBundle) => void;
-  onQuickBundleDeleted: (bundleId: string) => void;
   onPlanUpserted: (entry: WeeklyPlanEntry) => void;
 };
 
-const DAYS = [
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+const DAY_BY_JS_INDEX: Array<(typeof DAYS)[number] | "Sunday"> = [
+  "Sunday",
   "Monday",
   "Tuesday",
   "Wednesday",
   "Thursday",
   "Friday",
   "Saturday",
-  "Sunday",
-] as const;
+];
 
-const SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+function dayFromDate(dateValue: string): (typeof DAYS)[number] {
+  const parsed = new Date(`${dateValue}T00:00:00`);
+  const day = DAY_BY_JS_INDEX[parsed.getDay()] ?? "Monday";
+  return day === "Sunday" ? "Sunday" : day;
+}
+
+function ingredientsToList(raw: string): string[] {
+  return raw
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
 
 export default function DietPlanPage({
   profile,
   mealLogs,
   weeklyPlan,
-  savedFoods,
-  quickBundles,
   onMealAdded,
   onMealDeleted,
-  onSavedFoodAdded,
-  onSavedFoodDeleted,
-  onQuickBundleAdded,
-  onQuickBundleDeleted,
   onPlanUpserted,
 }: DietPlanPageProps) {
   const [pending, startTransition] = useTransition();
@@ -77,17 +70,11 @@ export default function DietPlanPage({
   const [mealCalories, setMealCalories] = useState(450);
   const [mealProtein, setMealProtein] = useState(30);
   const [mealOutsideFood, setMealOutsideFood] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
+  const [mealIngredients, setMealIngredients] = useState("");
+  const [mealNote, setMealNote] = useState("");
+  const [addToDaySlot, setAddToDaySlot] = useState<(typeof SLOTS)[number]>("Lunch");
 
-  const [savedFoodName, setSavedFoodName] = useState("");
-  const [savedFoodCalories, setSavedFoodCalories] = useState(450);
-  const [savedFoodProtein, setSavedFoodProtein] = useState(30);
-  const [savedFoodOutside, setSavedFoodOutside] = useState(false);
-  const [bundleName, setBundleName] = useState("");
-  const [selectedFoodIds, setSelectedFoodIds] = useState<string[]>([]);
-  
   const [analyzingImg, setAnalyzingImg] = useState(false);
   const [verificationData, setVerificationData] = useState<{
     mealName: string;
@@ -95,6 +82,7 @@ export default function DietPlanPage({
     protein: number;
     ingredients: string;
     confidence: "High" | "Low";
+    nutritionItems: AnalyzedNutritionItem[];
   } | null>(null);
 
   const [plannerDay, setPlannerDay] = useState<(typeof DAYS)[number]>("Monday");
@@ -102,32 +90,7 @@ export default function DietPlanPage({
   const [plannerMealName, setPlannerMealName] = useState("");
   const [plannerIngredients, setPlannerIngredients] = useState("");
 
-  const suggestions = useMemo(() => getDietSuggestions(profile), [profile]);
-
-  const savedFoodsById = useMemo(
-    () => new Map(savedFoods.map((food) => [food.id, food])),
-    [savedFoods],
-  );
-
-  const selectedFoods = useMemo(
-    () => selectedFoodIds.map((id) => savedFoodsById.get(id)).filter((food): food is SavedFoodItem => Boolean(food)),
-    [savedFoodsById, selectedFoodIds],
-  );
-
-  const selectedTotals = useMemo(
-    () =>
-      selectedFoods.reduce(
-        (accumulator, food) => {
-          return {
-            calories: accumulator.calories + food.calories,
-            protein: accumulator.protein + food.protein,
-            outsideCalories: accumulator.outsideCalories + (food.is_outside_food ? food.calories : 0),
-          };
-        },
-        { calories: 0, protein: 0, outsideCalories: 0 },
-      ),
-    [selectedFoods],
-  );
+  const shoppingList = useMemo(() => buildDietShoppingList(profile, weeklyPlan), [profile, weeklyPlan]);
 
   const todaySummary = useMemo(
     () =>
@@ -139,20 +102,25 @@ export default function DietPlanPage({
     [mealLogs, selectedDate, profile.hidden_calorie_buffer_percent],
   );
 
-  const shoppingList = useMemo(
-    () => buildDietShoppingList(profile, weeklyPlan),
-    [profile, weeklyPlan],
+  const orderedMeals = useMemo(
+    () => [...mealLogs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [mealLogs],
   );
 
-  const orderedMeals = useMemo(() => {
-    return [...mealLogs].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    );
-  }, [mealLogs]);
+  const weeklyEntriesByDay = useMemo(
+    () =>
+      DAYS.map((day) => ({
+        day,
+        slots: SLOTS.map((slot) => ({
+          slot,
+          entry: weeklyPlan.find((item) => item.day === day && item.slot === slot),
+        })),
+      })),
+    [weeklyPlan],
+  );
 
   const addMeal = () => {
     setMessage(null);
-
     const outsideCalories = mealOutsideFood ? mealCalories : 0;
 
     startTransition(async () => {
@@ -174,6 +142,8 @@ export default function DietPlanPage({
         onMealAdded(result.meal);
         setMealName("");
         setMealOutsideFood(false);
+        setMealIngredients("");
+        setMealNote("");
         setMessage("Meal saved");
       } catch {
         if (typeof navigator !== "undefined" && !navigator.onLine) {
@@ -190,222 +160,61 @@ export default function DietPlanPage({
           });
           setMealName("");
           setMealOutsideFood(false);
+          setMealIngredients("");
+          setMealNote("");
           setMessage("Offline: meal queued for sync");
           return;
         }
 
-        setMealName("");
-        setMealOutsideFood(false);
         setMessage("Unable to save meal right now. Please try again.");
       }
     });
   };
 
-  const addSavedFood = () => {
-    setMessage(null);
-
-    startTransition(async () => {
-      try {
-        const result = await addSavedFoodAction({
-          name: savedFoodName,
-          calories: savedFoodCalories,
-          protein: savedFoodProtein,
-          is_outside_food: savedFoodOutside,
-        });
-
-        if (!result.ok || !result.savedFood) {
-          setMessage(result.error ?? "Unable to save food item");
-          return;
-        }
-
-        onSavedFoodAdded(result.savedFood);
-        setSavedFoodName("");
-        setSavedFoodOutside(false);
-        setMessage("Saved food added");
-      } catch {
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          enqueue({
-            type: "saved-food",
-            payload: {
-              name: savedFoodName,
-              calories: savedFoodCalories,
-              protein: savedFoodProtein,
-              is_outside_food: savedFoodOutside,
-            },
-          });
-          setSavedFoodName("");
-          setSavedFoodOutside(false);
-          setMessage("Offline: saved food queued for sync");
-          return;
-        }
-
-        setSavedFoodName("");
-        setSavedFoodOutside(false);
-        setMessage("Unable to save food right now. Please try again.");
-      }
-    });
-  };
-
-  const removeSavedFood = (savedFoodId: string) => {
-    setMessage(null);
-
-    startTransition(async () => {
-      const result = await deleteSavedFoodAction(savedFoodId);
-
-      if (!result.ok) {
-        setMessage(result.error ?? "Unable to delete saved food");
-        return;
-      }
-
-      onSavedFoodDeleted(savedFoodId);
-      setSelectedFoodIds((current) => current.filter((id) => id !== savedFoodId));
-      setMessage("Saved food deleted");
-    });
-  };
-
-  const toggleSavedFood = (savedFoodId: string) => {
-    setSelectedFoodIds((current) => {
-      if (current.includes(savedFoodId)) {
-        return current.filter((id) => id !== savedFoodId);
-      }
-
-      return [...current, savedFoodId];
-    });
-  };
-
-  const saveQuickBundle = () => {
-    if (!selectedFoodIds.length) {
-      setMessage("Select at least one saved food to create a quick bundle");
+  const addToDay = () => {
+    if (mealName.trim().length < 2) {
+      setMessage("Enter a meal name first.");
       return;
     }
 
-    setMessage(null);
+    const detectedDay = dayFromDate(selectedDate);
+    const cleanedIngredients = ingredientsToList(mealIngredients);
+    const note = mealNote.trim();
+    const ingredients = note.length ? [...cleanedIngredients, `Note: ${note.slice(0, 44)}`] : cleanedIngredients;
 
     startTransition(async () => {
       try {
-        const result = await addQuickBundleAction({
-          name: bundleName.trim() || `Quick Bundle (${selectedFoodIds.length})`,
-          item_ids: selectedFoodIds,
+        const result = await upsertWeeklyPlanEntryAction({
+          day: detectedDay,
+          slot: addToDaySlot,
+          meal_name: mealName.trim(),
+          ingredients,
         });
 
-        if (!result.ok || !result.bundle) {
-          setMessage(result.error ?? "Unable to save quick bundle");
+        if (!result.ok || !result.entry) {
+          setMessage(result.error ?? "Unable to add meal to planner");
           return;
         }
 
-        onQuickBundleAdded(result.bundle);
-        setBundleName("");
-        setMessage("Quick bundle saved");
+        onPlanUpserted(result.entry);
+        setMessage(`Added to ${detectedDay} - ${addToDaySlot}`);
       } catch {
         if (typeof navigator !== "undefined" && !navigator.onLine) {
           enqueue({
-            type: "quick-bundle",
+            type: "weekly-plan",
             payload: {
-              name: bundleName.trim() || `Quick Bundle (${selectedFoodIds.length})`,
-              item_ids: selectedFoodIds,
+              day: detectedDay,
+              slot: addToDaySlot,
+              meal_name: mealName.trim(),
+              ingredients,
             },
           });
-          setBundleName("");
-          setMessage("Offline: quick bundle queued for sync");
+          setMessage("Offline: planner update queued for sync");
           return;
         }
 
-        setBundleName("");
-        setMessage("Unable to save bundle right now. Please try again.");
+        setMessage("Unable to add this meal to planner right now.");
       }
-    });
-  };
-
-  const logSelectionNow = () => {
-    if (!selectedFoodIds.length) {
-      setMessage("Select at least one saved food to log quick bundle");
-      return;
-    }
-
-    setMessage(null);
-
-    startTransition(async () => {
-      try {
-        const result = await logQuickSelectionAction({
-          item_ids: selectedFoodIds,
-          consumed_on: selectedDate,
-          bundle_name: bundleName.trim() || undefined,
-        });
-
-        if (!result.ok || !result.meal) {
-          setMessage(result.error ?? "Unable to log quick bundle selection");
-          return;
-        }
-
-        onMealAdded(result.meal);
-        setMessage("Quick bundle logged");
-      } catch {
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          enqueue({
-            type: "quick-selection-log",
-            payload: {
-              item_ids: selectedFoodIds,
-              consumed_on: selectedDate,
-              bundle_name: bundleName.trim() || undefined,
-            },
-          });
-          setMessage("Offline: quick selection log queued for sync");
-          return;
-        }
-
-        setMessage("Unable to log selection right now. Please try again.");
-      }
-    });
-  };
-
-  const logSavedQuickBundle = (bundleId: string) => {
-    setMessage(null);
-
-    startTransition(async () => {
-      try {
-        const result = await logQuickBundleAction({
-          bundle_id: bundleId,
-          consumed_on: selectedDate,
-        });
-
-        if (!result.ok || !result.meal) {
-          setMessage(result.error ?? "Unable to log quick bundle");
-          return;
-        }
-
-        onMealAdded(result.meal);
-        setMessage("Quick bundle logged");
-      } catch {
-        if (typeof navigator !== "undefined" && !navigator.onLine) {
-          enqueue({
-            type: "quick-bundle-log",
-            payload: {
-              bundle_id: bundleId,
-              consumed_on: selectedDate,
-            },
-          });
-          setMessage("Offline: quick bundle log queued for sync");
-          return;
-        }
-
-        setMessage("Unable to log bundle right now. Please try again.");
-      }
-    });
-  };
-
-  const removeQuickBundle = (bundleId: string) => {
-    setMessage(null);
-
-    startTransition(async () => {
-      const result = await deleteQuickBundleAction(bundleId);
-
-      if (!result.ok) {
-        setMessage(result.error ?? "Unable to delete quick bundle");
-        return;
-      }
-
-      onQuickBundleDeleted(bundleId);
-      setMessage("Quick bundle deleted");
     });
   };
 
@@ -425,85 +234,8 @@ export default function DietPlanPage({
     });
   };
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setAnalyzingImg(true);
-    setMessage("Analyzing your meal...");
-
-    const formData = new FormData();
-    formData.append("image", file);
-
-    startTransition(async () => {
-      try {
-        const result = await analyzeMealImageAction(formData);
-
-        if (!result.ok || !result.data) {
-          setMessage(result.error ?? "Unable to analyze meal image");
-          return;
-        }
-
-        setVerificationData(result.data);
-        setMessage("Analysis complete");
-      } catch (err) {
-        setMessage("Unable to process image right now. Please try again.");
-      } finally {
-        setAnalyzingImg(false);
-      }
-    });
-
-    event.target.value = ""; // Reset input so same file can be uploaded again
-  };
-
-  const confirmVerifiedMeal = () => {
-    if (!verificationData) return;
-    
-    // Autofill and submit
-    setMealName(verificationData.mealName);
-    setMealCalories(verificationData.calories);
-    setMealProtein(verificationData.protein);
-    setMealOutsideFood(false); // Can be adjusted by user later
-    
-    // We do a manual enqueue and dispatch OR save directly.
-    startTransition(async () => {
-      try {
-        const result = await addMealLogAction({
-          meal_name: verificationData.mealName,
-          calories: verificationData.calories,
-          protein: verificationData.protein,
-          is_outside_food: false,
-          outside_calories: 0,
-          consumed_on: selectedDate,
-        });
-
-        if (result.ok && result.meal) {
-          onMealAdded(result.meal);
-          setMessage("Meal saved via Quick Log");
-        } else {
-          setMessage(result.error ?? "Unable to auto-save quick log");
-        }
-      } finally {
-        setVerificationData(null);
-      }
-    });
-  };
-
-  const rejectVerifiedMeal = () => {
-    if (!verificationData) return;
-    // Just map to inputs and hide dialog so user can edit
-    setMealName(verificationData.mealName);
-    setMealCalories(verificationData.calories);
-    setMealProtein(verificationData.protein);
-    setMessage("Auto-fill complete. Please review inputs.");
-    setVerificationData(null);
-  };
-
   const savePlan = () => {
-    const ingredients = plannerIngredients
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
+    const ingredients = ingredientsToList(plannerIngredients);
 
     setMessage(null);
 
@@ -543,14 +275,118 @@ export default function DietPlanPage({
     });
   };
 
+  const clearPlannerSlot = (day: (typeof DAYS)[number], slot: (typeof SLOTS)[number]) => {
+    startTransition(async () => {
+      const result = await upsertWeeklyPlanEntryAction({
+        day,
+        slot,
+        meal_name: "",
+        ingredients: [],
+      });
+
+      if (!result.ok || !result.entry) {
+        setMessage(result.error ?? "Unable to clear planner slot");
+        return;
+      }
+
+      onPlanUpserted(result.entry);
+      setMessage(`Cleared ${day} - ${slot}`);
+    });
+  };
+
+  const editPlannerEntry = (entry: WeeklyPlanEntry) => {
+    setPlannerDay(entry.day as (typeof DAYS)[number]);
+    setPlannerSlot(entry.slot);
+    setPlannerMealName(entry.meal_name);
+    setPlannerIngredients(entry.ingredients.join(", "));
+    setMessage(`Loaded ${entry.day} - ${entry.slot} into planner editor`);
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setAnalyzingImg(true);
+    setMessage("Analyzing your meal...");
+
+    const formData = new FormData();
+    formData.append("image", file);
+
+    startTransition(async () => {
+      try {
+        const result = await analyzeMealImageAction(formData);
+
+        if (!result.ok || !result.data) {
+          setMessage(result.error ?? "Unable to analyze meal image");
+          return;
+        }
+
+        setVerificationData(result.data);
+        setMealIngredients(result.data.ingredients);
+        setMessage("Analysis complete");
+      } catch {
+        setMessage("Unable to process image right now. Please try again.");
+      } finally {
+        setAnalyzingImg(false);
+      }
+    });
+
+    event.target.value = "";
+  };
+
+  const confirmVerifiedMeal = () => {
+    if (!verificationData) return;
+
+    setMealName(verificationData.mealName);
+    setMealCalories(verificationData.calories);
+    setMealProtein(verificationData.protein);
+    setMealOutsideFood(false);
+    setMealIngredients(verificationData.ingredients);
+
+    startTransition(async () => {
+      try {
+        const result = await addMealLogAction({
+          meal_name: verificationData.mealName,
+          calories: verificationData.calories,
+          protein: verificationData.protein,
+          is_outside_food: false,
+          outside_calories: 0,
+          consumed_on: selectedDate,
+          nutrition_items: verificationData.nutritionItems,
+        });
+
+        if (result.ok && result.meal) {
+          onMealAdded(result.meal);
+          setMessage("Meal saved via Quick Log");
+        } else {
+          setMessage(result.error ?? "Unable to auto-save quick log");
+        }
+      } finally {
+        setVerificationData(null);
+      }
+    });
+  };
+
+  const rejectVerifiedMeal = () => {
+    if (!verificationData) return;
+
+    setMealName(verificationData.mealName);
+    setMealCalories(verificationData.calories);
+    setMealProtein(verificationData.protein);
+    setMessage("Auto-fill complete. Please review inputs.");
+    setVerificationData(null);
+  };
+
+  const autoDetectedDay = dayFromDate(selectedDate);
+
   return (
     <section className="space-y-4 rounded-2xl border border-white/10 bg-zinc-950/80 p-4">
-      {verificationData && (
+      {verificationData ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white mb-2">Verification Prompt</h3>
+            <h3 className="mb-2 text-lg font-semibold text-white">Verification Prompt</h3>
             {verificationData.confidence === "Low" ? (
-             <p className="text-amber-400 text-xs mb-3 font-semibold">Low Confidence. Please verify this dish.</p>
+              <p className="mb-3 text-xs font-semibold text-amber-400">Low Confidence. Please verify this dish.</p>
             ) : null}
             <p className="text-sm text-zinc-300">
               Is this <strong>{verificationData.mealName}</strong>?
@@ -573,12 +409,12 @@ export default function DietPlanPage({
                 onClick={rejectVerifiedMeal}
                 className="flex-1 rounded-md border border-white/10 bg-zinc-800 py-2 text-sm font-semibold text-zinc-300 transition hover:bg-zinc-700"
               >
-                No, I'll type it
+                No, I&apos;ll type it
               </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       <header className="space-y-1">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
@@ -590,16 +426,29 @@ export default function DietPlanPage({
         </p>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3">
         <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
           <h3 className="flex items-center justify-between text-sm font-semibold text-zinc-200">
             <span>Daily Meal Logger</span>
-            <label className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs transition ${analyzingImg ? 'border-lime-500/40 bg-lime-500/10 text-lime-400 cursor-not-allowed' : 'border-white/10 bg-zinc-900 text-zinc-300 hover:bg-zinc-800'}`}>
+            <label
+              className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1 text-xs transition ${
+                analyzingImg
+                  ? "cursor-not-allowed border-lime-500/40 bg-lime-500/10 text-lime-400"
+                  : "border-white/10 bg-zinc-900 text-zinc-300 hover:bg-zinc-800"
+              }`}
+            >
               {analyzingImg ? <Camera className="h-4 w-4 animate-pulse" /> : <Upload className="h-4 w-4" />}
               {analyzingImg ? "Analyzing..." : "Quick Log"}
-              <input type="file" className="hidden" accept=".jpg,.png,.heic,.heif,.webp" onChange={handleImageUpload} disabled={analyzingImg} />
+              <input
+                type="file"
+                className="hidden"
+                accept=".jpg,.png,.heic,.heif,.webp"
+                onChange={handleImageUpload}
+                disabled={analyzingImg}
+              />
             </label>
           </h3>
+
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="text-xs text-zinc-400">
               Date
@@ -610,6 +459,7 @@ export default function DietPlanPage({
                 className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
               />
             </label>
+
             <label className="text-xs text-zinc-400">
               Meal Name
               <input
@@ -619,6 +469,7 @@ export default function DietPlanPage({
                 placeholder="Chicken bowl"
               />
             </label>
+
             <label className="text-xs text-zinc-400">
               Calories
               <input
@@ -628,6 +479,7 @@ export default function DietPlanPage({
                 className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
               />
             </label>
+
             <label className="text-xs text-zinc-400">
               Protein (g)
               <input
@@ -637,6 +489,51 @@ export default function DietPlanPage({
                 className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
               />
             </label>
+
+            <label className="text-xs text-zinc-400 sm:col-span-2">
+              Ingredients (review before adding)
+              <textarea
+                value={mealIngredients}
+                onChange={(event) => setMealIngredients(event.target.value)}
+                rows={3}
+                placeholder="Ingredients from image analysis will appear here. You can edit before saving."
+                className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-lime-500"
+              />
+            </label>
+
+            <label className="text-xs text-zinc-400 sm:col-span-2">
+              Notes (optional)
+              <textarea
+                value={mealNote}
+                onChange={(event) => setMealNote(event.target.value)}
+                rows={2}
+                placeholder="e.g., less oil, post-workout meal, add fruit"
+                className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-lime-500"
+              />
+            </label>
+
+            <label className="text-xs text-zinc-400">
+              Add To Day Slot
+              <select
+                value={addToDaySlot}
+                onChange={(event) => setAddToDaySlot(event.target.value as (typeof SLOTS)[number])}
+                className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
+              >
+                {SLOTS.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="text-xs text-zinc-400">
+              <p className="mb-1">Auto-Detected Day</p>
+              <div className="mt-1 rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-200">
+                {autoDetectedDay}
+              </div>
+            </div>
+
             <label className="text-xs text-zinc-400 sm:col-span-2">
               <span className="mb-1 block">Outside Food</span>
               <button
@@ -653,15 +550,26 @@ export default function DietPlanPage({
             </label>
           </div>
 
-          <button
-            type="button"
-            onClick={addMeal}
-            disabled={pending || mealName.trim().length < 2}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-60"
-          >
-            <ListPlus className="h-4 w-4" />
-            Add Meal
-          </button>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={addMeal}
+              disabled={pending || mealName.trim().length < 2}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-60"
+            >
+              <ListPlus className="h-4 w-4" />
+              Add Meal
+            </button>
+
+            <button
+              type="button"
+              onClick={addToDay}
+              disabled={pending || mealName.trim().length < 2}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-lime-500/60 bg-lime-500/10 px-3 py-2 text-sm font-semibold text-lime-300 disabled:opacity-60"
+            >
+              Add to Day
+            </button>
+          </div>
 
           <div className="rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
             <p>Meals: {todaySummary.count}</p>
@@ -688,7 +596,8 @@ export default function DietPlanPage({
                         meal.calories +
                           (meal.outside_calories ?? (meal.is_outside_food ? meal.calories : 0)) *
                             (profile.hidden_calorie_buffer_percent / 100),
-                      )} kcal, {meal.protein}g protein
+                      )}{" "}
+                      kcal, {meal.protein}g protein
                     </p>
                     {meal.is_outside_food ? (
                       <p className="text-[11px] text-amber-300">
@@ -696,6 +605,7 @@ export default function DietPlanPage({
                       </p>
                     ) : null}
                   </div>
+
                   <button
                     type="button"
                     onClick={() => removeMeal(meal.id)}
@@ -710,233 +620,7 @@ export default function DietPlanPage({
           </div>
         </section>
 
-        <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
-          <h3 className="text-sm font-semibold text-zinc-200">Suggested Meals</h3>
-          <div className="grid grid-cols-1 gap-2">
-            {suggestions.map((suggestion) => (
-              <article
-                key={suggestion.name}
-                className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-300"
-              >
-                <p className="font-semibold text-zinc-100">{suggestion.name}</p>
-                <p>
-                  {suggestion.calories} kcal, {suggestion.protein}g protein
-                </p>
-                <p className="mt-1 text-zinc-400">{suggestion.ingredients.join(", ")}</p>
-              </article>
-            ))}
-          </div>
-        </section>
       </div>
-
-      <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-          <PackagePlus className="h-4 w-4" />
-          Saved Foods
-        </h3>
-
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-5">
-          <label className="text-xs text-zinc-400 md:col-span-2">
-            Food Name
-            <input
-              value={savedFoodName}
-              onChange={(event) => setSavedFoodName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
-              placeholder="Egg chicken roll"
-            />
-          </label>
-
-          <label className="text-xs text-zinc-400">
-            Calories
-            <input
-              type="number"
-              value={savedFoodCalories}
-              onChange={(event) => setSavedFoodCalories(Number(event.target.value) || 0)}
-              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
-            />
-          </label>
-
-          <label className="text-xs text-zinc-400">
-            Protein (g)
-            <input
-              type="number"
-              value={savedFoodProtein}
-              onChange={(event) => setSavedFoodProtein(Number(event.target.value) || 0)}
-              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
-            />
-          </label>
-
-          <label className="text-xs text-zinc-400">
-            Outside Food
-            <button
-              type="button"
-              onClick={() => setSavedFoodOutside((current) => !current)}
-              className={`mt-1 w-full rounded-md border px-2 py-1.5 text-sm ${
-                savedFoodOutside
-                  ? "border-amber-500/60 bg-amber-500/20 text-amber-200"
-                  : "border-white/10 bg-zinc-950 text-zinc-300"
-              }`}
-            >
-              {savedFoodOutside ? "Yes" : "No"}
-            </button>
-          </label>
-        </div>
-
-        <button
-          type="button"
-          onClick={addSavedFood}
-          disabled={pending || savedFoodName.trim().length < 2}
-          className="inline-flex items-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-60"
-        >
-          <ListPlus className="h-4 w-4" />
-          Save Food Item
-        </button>
-
-        <div className="max-h-56 space-y-2 overflow-auto pr-1">
-          {savedFoods.length === 0 ? (
-            <p className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-400">
-              No saved foods yet. Add reusable items to build quick bundles.
-            </p>
-          ) : null}
-
-          {savedFoods.map((food) => {
-            const selected = selectedFoodIds.includes(food.id);
-
-            return (
-              <article
-                key={food.id}
-                className="flex items-center justify-between rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs"
-              >
-                <button
-                  type="button"
-                  onClick={() => toggleSavedFood(food.id)}
-                  className="flex items-center gap-3 text-left"
-                >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 rounded-sm border ${
-                      selected ? "border-lime-400 bg-lime-400" : "border-zinc-500"
-                    }`}
-                  />
-                  <span>
-                    <span className="block font-semibold text-zinc-100">{food.name}</span>
-                    <span className="text-zinc-300">
-                      {food.calories} kcal, {food.protein}g protein
-                    </span>
-                    {food.is_outside_food ? (
-                      <span className="block text-[11px] text-amber-300">Outside Food</span>
-                    ) : null}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => removeSavedFood(food.id)}
-                  disabled={pending}
-                  className="rounded-md border border-red-500/40 p-1.5 text-red-300 disabled:opacity-60"
-                  aria-label="Delete saved food"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
-        <h3 className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-          <Layers className="h-4 w-4" />
-          Quick Bundle
-        </h3>
-
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-[2fr_1fr_1fr]">
-          <label className="text-xs text-zinc-400">
-            Bundle Name
-            <input
-              value={bundleName}
-              onChange={(event) => setBundleName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
-              placeholder="3-roll bundle"
-            />
-          </label>
-
-          <button
-            type="button"
-            onClick={saveQuickBundle}
-            disabled={pending || selectedFoodIds.length === 0}
-            className="self-end rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-60"
-          >
-            Save Bundle
-          </button>
-
-          <button
-            type="button"
-            onClick={logSelectionNow}
-            disabled={pending || selectedFoodIds.length === 0}
-            className="self-end rounded-md border border-lime-500/50 px-3 py-2 text-sm font-semibold text-lime-300 disabled:opacity-60"
-          >
-            Log Selected Now
-          </button>
-        </div>
-
-        <div className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
-          <p>Selected foods: {selectedFoods.length}</p>
-          <p>Calories: {selectedTotals.calories}</p>
-          <p>Protein: {selectedTotals.protein}g</p>
-        </div>
-
-        <div className="space-y-2">
-          {quickBundles.length === 0 ? (
-            <p className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-400">
-              No quick bundles yet.
-            </p>
-          ) : null}
-
-          {quickBundles.map((bundle) => {
-            const foods = bundle.item_ids
-              .map((id) => savedFoodsById.get(id))
-              .filter((food): food is SavedFoodItem => Boolean(food));
-
-            const calories = foods.reduce((sum, food) => sum + food.calories, 0);
-            const protein = foods.reduce((sum, food) => sum + food.protein, 0);
-
-            return (
-              <article
-                key={bundle.id}
-                className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-zinc-100">{bundle.name}</p>
-                    <p className="text-zinc-300">
-                      {foods.length} items · {calories} kcal · {protein}g protein
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => logSavedQuickBundle(bundle.id)}
-                      disabled={pending}
-                      className="rounded-md bg-lime-500 px-2.5 py-1.5 text-xs font-semibold text-black disabled:opacity-60"
-                    >
-                      Log 1-Click
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeQuickBundle(bundle.id)}
-                      disabled={pending}
-                      className="rounded-md border border-red-500/40 p-1.5 text-red-300 disabled:opacity-60"
-                      aria-label="Delete quick bundle"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
 
       <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
         <h3 className="text-sm font-semibold text-zinc-200">Weekly Planner</h3>
@@ -1003,19 +687,40 @@ export default function DietPlanPage({
         </button>
 
         <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
-          {DAYS.map((day) => (
+          {weeklyEntriesByDay.map(({ day, slots }) => (
             <article key={day} className="rounded-md border border-white/10 bg-zinc-950 px-2.5 py-2 text-xs">
               <p className="mb-2 font-semibold text-zinc-100">{day}</p>
-              <ul className="space-y-1 text-zinc-300">
-                {SLOTS.map((slot) => {
-                  const entry = weeklyPlan.find((item) => item.day === day && item.slot === slot);
-                  return (
-                    <li key={`${day}-${slot}`}>
-                      <span className="text-zinc-400">{slot}:</span>{" "}
-                      {entry?.meal_name || "-"}
-                    </li>
-                  );
-                })}
+              <ul className="space-y-2 text-zinc-300">
+                {slots.map(({ slot, entry }) => (
+                  <li key={`${day}-${slot}`} className="rounded border border-white/10 bg-black/60 p-2">
+                    <p>
+                      <span className="text-zinc-400">{slot}:</span> {entry?.meal_name || "-"}
+                    </p>
+                    {entry?.ingredients?.length ? (
+                      <p className="mt-1 text-[11px] text-zinc-500">{entry.ingredients.join(", ")}</p>
+                    ) : null}
+                    {entry ? (
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => editPlannerEntry(entry)}
+                          className="inline-flex items-center gap-1 rounded border border-white/20 px-2 py-1 text-[11px] text-zinc-200"
+                        >
+                          <PencilLine className="h-3 w-3" />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => clearPlannerSlot(day, slot)}
+                          className="inline-flex items-center gap-1 rounded border border-red-500/40 px-2 py-1 text-[11px] text-red-300"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                          Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
             </article>
           ))}

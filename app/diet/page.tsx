@@ -1,7 +1,5 @@
 import FitnessShell from "@/components/FitnessShell";
 import {
-  getQuickBundles,
-  getSavedFoods,
   getMealLogs,
   getProfile,
   getWeeklyPlan,
@@ -9,13 +7,11 @@ import {
 } from "@/lib/data/fitnessStore";
 
 export default async function DietRoute() {
-  const [profile, logs, meals, weeklyPlan, savedFoods, quickBundles] = await Promise.all([
+  const [profile, logs, meals, weeklyPlan] = await Promise.all([
     getProfile(),
     getWorkoutLogs(),
     getMealLogs(),
     getWeeklyPlan(),
-    getSavedFoods(),
-    getQuickBundles(),
   ]);
 
   return (
@@ -24,8 +20,6 @@ export default async function DietRoute() {
       initialLogs={logs}
       initialMealLogs={meals}
       initialWeeklyPlan={weeklyPlan}
-      initialSavedFoods={savedFoods}
-      initialQuickBundles={quickBundles}
       mode="diet-plan"
     />
   );

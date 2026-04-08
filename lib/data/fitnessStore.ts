@@ -13,6 +13,7 @@ import {
   type WorkoutLog,
 } from "@/lib/types/fitness";
 import type {
+  AnalyzedNutritionItem,
   MealLog,
   QuickBundle,
   SavedFoodItem,
@@ -142,15 +143,20 @@ export async function uploadTempImage(file: File, fileId: string): Promise<strin
 
   const res = await supabase.storage.from("temp_uploads").upload(fileId, file, { upsert: true });
   if (res.error) {
+    console.error("[temp-upload] upload failed", { fileId, error: res.error.message });
     if (res.error.message.includes("not found") || res.error.message.includes("Bucket")) {
       // Create bucket on-the-fly if needed during dev, or handle graceful fail
       await supabase.storage.createBucket("temp_uploads", { public: false });
       const retry = await supabase.storage.from("temp_uploads").upload(fileId, file, { upsert: true });
-      if (retry.error) return null;
+      if (retry.error) {
+        console.error("[temp-upload] retry failed", { fileId, error: retry.error.message });
+        return null;
+      }
     } else {
       return null;
     }
   }
+  console.log("[temp-upload] upload success", { fileId });
   return fileId;
 }
 
@@ -159,7 +165,48 @@ export async function deleteTempImage(fileId: string): Promise<boolean> {
   if (!supabase) return false;
 
   const res = await supabase.storage.from("temp_uploads").remove([fileId]);
+  if (res.error) {
+    console.error("[temp-upload] delete failed", { fileId, error: res.error.message });
+    return false;
+  }
+
+  console.log("[temp-upload] delete success", { fileId });
   return !res.error;
+}
+
+export async function insertMealNutritionItems(
+  mealLogId: string,
+  items: AnalyzedNutritionItem[],
+): Promise<boolean> {
+  if (!items.length) {
+    return true;
+  }
+
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    return true;
+  }
+
+  const rows = items.map((item) => ({
+    id: randomUUID(),
+    meal_log_id: mealLogId,
+    profile_id: PROFILE_ID,
+    item_name: item.name,
+    calories: Math.max(0, Math.round(item.calories)),
+    protein: Math.max(0, Math.round(item.protein)),
+    carbs: Math.max(0, Math.round(item.carbs)),
+    fats: Math.max(0, Math.round(item.fats)),
+    created_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from("meal_nutrition_items").insert(rows);
+  if (error) {
+    console.error("[meal-nutrition-items] insert failed", { mealLogId, error: error.message });
+    return false;
+  }
+
+  return true;
 }
 
 function getMemoryDb(): FitnessDatabase {
