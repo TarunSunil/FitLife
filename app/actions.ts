@@ -314,7 +314,16 @@ export async function addWorkoutLogAction(
     };
   }
 
-  const log = await insertWorkoutLog(parsed.data);
+  let log: WorkoutLog;
+
+  try {
+    log = await insertWorkoutLog(parsed.data);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to save workout log",
+    };
+  }
 
   revalidatePath("/");
   revalidatePath("/workout-logger");
@@ -389,10 +398,19 @@ export async function addMealLogAction(
   const outsideCalories =
     parsed.data.outside_calories ?? (parsed.data.is_outside_food ? parsed.data.calories : 0);
 
-  const meal = await insertMealLog({
-    ...parsed.data,
-    outside_calories: outsideCalories,
-  });
+  let meal: MealLog;
+
+  try {
+    meal = await insertMealLog({
+      ...parsed.data,
+      outside_calories: outsideCalories,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to save meal",
+    };
+  }
 
   if (meal && parsed.data.nutrition_items?.length) {
     await insertMealNutritionItems(meal.id, parsed.data.nutrition_items);
@@ -413,7 +431,16 @@ export async function addSavedFoodAction(
     return { ok: false, error: "Invalid saved food payload" };
   }
 
-  const savedFood = await insertSavedFood(parsed.data);
+  let savedFood: SavedFoodItem;
+
+  try {
+    savedFood = await insertSavedFood(parsed.data);
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to save saved food",
+    };
+  }
 
   revalidatePath("/");
   revalidatePath("/diet");
@@ -449,10 +476,19 @@ export async function addQuickBundleAction(
     return { ok: false, error: "Invalid quick bundle payload" };
   }
 
-  const bundle = await insertQuickBundle({
-    name: parsed.data.name,
-    item_ids: [...new Set(parsed.data.item_ids)],
-  });
+  let bundle: QuickBundle;
+
+  try {
+    bundle = await insertQuickBundle({
+      name: parsed.data.name,
+      item_ids: [...new Set(parsed.data.item_ids)],
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to save quick bundle",
+    };
+  }
 
   revalidatePath("/");
   revalidatePath("/diet");

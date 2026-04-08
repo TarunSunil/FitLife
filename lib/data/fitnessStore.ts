@@ -476,7 +476,7 @@ export async function insertWorkoutLog(
       return normalizeLog(data as Partial<WorkoutLog>);
     }
 
-    return newLog;
+    throw new Error(error?.message ?? "Failed to insert workout log in Supabase");
   }
 
   const db = await ensureDb();
@@ -538,7 +538,7 @@ export async function insertMealLog(
       return normalizeMealLog(data as Partial<MealLog>);
     }
 
-    return newLog;
+    throw new Error(error?.message ?? "Failed to insert meal log in Supabase");
   }
 
   const db = await ensureDb();
@@ -673,7 +673,7 @@ export async function insertSavedFood(
       return normalizeSavedFoodItem(data as Partial<SavedFoodItem>);
     }
 
-    return newFood;
+    throw new Error(error?.message ?? "Failed to insert saved food in Supabase");
   }
 
   const db = await ensureDb();
@@ -785,7 +785,7 @@ export async function insertQuickBundle(
       return normalizeQuickBundle(data as Partial<QuickBundle>);
     }
 
-    return newBundle;
+    throw new Error(error?.message ?? "Failed to insert quick bundle in Supabase");
   }
 
   const db = await ensureDb();
