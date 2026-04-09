@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChefHat, ListPlus, PencilLine, Trash2, Upload } from "lucide-react";
 
 import {
   addMealLogAction,
   analyzeMealImageAction,
   deleteMealLogAction,
+  moveMealToWeeklyPlanAction,
   upsertWeeklyPlanEntryAction,
 } from "@/app/actions";
 import {
@@ -42,6 +44,10 @@ const DAY_BY_JS_INDEX: Array<(typeof DAYS)[number] | "Sunday"> = [
   "Saturday",
 ];
 
+const SWIPE_REVEAL_PX = 44;
+const SWIPE_COMMIT_PX = 116;
+const SWIPE_OPEN_X = 84;
+
 function dayFromDate(dateValue: string): (typeof DAYS)[number] {
   const parsed = new Date(`${dateValue}T00:00:00`);
   const day = DAY_BY_JS_INDEX[parsed.getDay()] ?? "Monday";
@@ -53,6 +59,16 @@ function ingredientsToList(raw: string): string[] {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function normalizeNumericInput(raw: string): string {
+  const digitsOnly = raw.replace(/\D/g, "");
+
+  if (!digitsOnly.length) {
+    return "";
+  }
+
+  return digitsOnly.replace(/^0+(?=\d)/, "");
 }
 
 export default function DietPlanPage({
@@ -67,8 +83,8 @@ export default function DietPlanPage({
   const [message, setMessage] = useState<string | null>(null);
 
   const [mealName, setMealName] = useState("");
-  const [mealCalories, setMealCalories] = useState(450);
-  const [mealProtein, setMealProtein] = useState(30);
+  const [mealCaloriesInput, setMealCaloriesInput] = useState("450");
+  const [mealProteinInput, setMealProteinInput] = useState("30");
   const [mealOutsideFood, setMealOutsideFood] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10));
   const [mealIngredients, setMealIngredients] = useState("");
@@ -89,6 +105,9 @@ export default function DietPlanPage({
   const [plannerSlot, setPlannerSlot] = useState<(typeof SLOTS)[number]>("Breakfast");
   const [plannerMealName, setPlannerMealName] = useState("");
   const [plannerIngredients, setPlannerIngredients] = useState("");
+  const [revealedMealId, setRevealedMealId] = useState<string | null>(null);
+  const [snapBackMealId, setSnapBackMealId] = useState<string | null>(null);
+  const [movingMealId, setMovingMealId] = useState<string | null>(null);
 
   const shoppingList = useMemo(() => buildDietShoppingList(profile, weeklyPlan), [profile, weeklyPlan]);
 
@@ -106,6 +125,14 @@ export default function DietPlanPage({
     () => [...mealLogs].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
     [mealLogs],
   );
+
+  const stagedMeals = useMemo(
+    () => orderedMeals.filter((meal) => meal.consumed_on === selectedDate),
+    [orderedMeals, selectedDate],
+  );
+
+  const mealCalories = Number.parseInt(mealCaloriesInput, 10) || 0;
+  const mealProtein = Number.parseInt(mealProteinInput, 10) || 0;
 
   const weeklyEntriesByDay = useMemo(
     () =>
@@ -141,6 +168,8 @@ export default function DietPlanPage({
 
         onMealAdded(result.meal);
         setMealName("");
+        setMealCaloriesInput("450");
+        setMealProteinInput("30");
         setMealOutsideFood(false);
         setMealIngredients("");
         setMealNote("");
@@ -159,6 +188,8 @@ export default function DietPlanPage({
             },
           });
           setMealName("");
+          setMealCaloriesInput("450");
+          setMealProteinInput("30");
           setMealOutsideFood(false);
           setMealIngredients("");
           setMealNote("");
@@ -338,8 +369,8 @@ export default function DietPlanPage({
     if (!verificationData) return;
 
     setMealName(verificationData.mealName);
-    setMealCalories(verificationData.calories);
-    setMealProtein(verificationData.protein);
+    setMealCaloriesInput(String(verificationData.calories));
+    setMealProteinInput(String(verificationData.protein));
     setMealOutsideFood(false);
     setMealIngredients(verificationData.ingredients);
 
@@ -371,10 +402,48 @@ export default function DietPlanPage({
     if (!verificationData) return;
 
     setMealName(verificationData.mealName);
-    setMealCalories(verificationData.calories);
-    setMealProtein(verificationData.protein);
+    setMealCaloriesInput(String(verificationData.calories));
+    setMealProteinInput(String(verificationData.protein));
     setMessage("Auto-fill complete. Please review inputs.");
     setVerificationData(null);
+  };
+
+  const moveStagedMealToPlanner = (meal: MealLog) => {
+    if (movingMealId || pending) {
+      return;
+    }
+
+    const detectedDay = dayFromDate(selectedDate);
+    setMessage(null);
+    setRevealedMealId(null);
+    setMovingMealId(meal.id);
+
+    startTransition(async () => {
+      try {
+        const result = await moveMealToWeeklyPlanAction({
+          meal_log_id: meal.id,
+          day: detectedDay,
+          slot: addToDaySlot,
+          meal_name: meal.meal_name,
+          ingredients: [],
+        });
+
+        if (!result.ok || !result.entry) {
+          setMessage(result.error ?? "Unable to move staged meal");
+          return;
+        }
+
+        onPlanUpserted(result.entry);
+        onMealDeleted(meal.id);
+        setMessage(`Moved to ${detectedDay} - ${addToDaySlot}`);
+
+        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+          navigator.vibrate(16);
+        }
+      } finally {
+        setMovingMealId(null);
+      }
+    });
   };
 
   const autoDetectedDay = dayFromDate(selectedDate);
@@ -474,8 +543,14 @@ export default function DietPlanPage({
               Calories
               <input
                 type="number"
-                value={mealCalories}
-                onChange={(event) => setMealCalories(Number(event.target.value) || 0)}
+                inputMode="numeric"
+                value={mealCaloriesInput}
+                onFocus={(event) => {
+                  if (event.currentTarget.value === "0") {
+                    event.currentTarget.select();
+                  }
+                }}
+                onChange={(event) => setMealCaloriesInput(normalizeNumericInput(event.target.value))}
                 className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
               />
             </label>
@@ -484,8 +559,14 @@ export default function DietPlanPage({
               Protein (g)
               <input
                 type="number"
-                value={mealProtein}
-                onChange={(event) => setMealProtein(Number(event.target.value) || 0)}
+                inputMode="numeric"
+                value={mealProteinInput}
+                onFocus={(event) => {
+                  if (event.currentTarget.value === "0") {
+                    event.currentTarget.select();
+                  }
+                }}
+                onChange={(event) => setMealProteinInput(normalizeNumericInput(event.target.value))}
                 className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
               />
             </label>
@@ -581,42 +662,117 @@ export default function DietPlanPage({
             </p>
           </div>
 
-          <div className="max-h-48 space-y-2 overflow-auto pr-1">
-            {orderedMeals
-              .filter((meal) => meal.consumed_on === selectedDate)
-              .map((meal) => (
-                <article
-                  key={meal.id}
-                  className="flex items-center justify-between rounded-md border border-white/10 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300"
-                >
-                  <div>
-                    <p className="font-semibold text-zinc-100">{meal.meal_name}</p>
-                    <p>
-                      {Math.round(
-                        meal.calories +
-                          (meal.outside_calories ?? (meal.is_outside_food ? meal.calories : 0)) *
-                            (profile.hidden_calorie_buffer_percent / 100),
-                      )}{" "}
-                      kcal, {meal.protein}g protein
-                    </p>
-                    {meal.is_outside_food ? (
-                      <p className="text-[11px] text-amber-300">
-                        Outside Food +{profile.hidden_calorie_buffer_percent}% buffer
-                      </p>
-                    ) : null}
-                  </div>
+          <p className="text-[11px] text-zinc-500">
+            Swipe staged cards left-to-right to reveal <span className="font-semibold text-lime-300">Add to Day</span>.
+          </p>
 
-                  <button
-                    type="button"
-                    onClick={() => removeMeal(meal.id)}
-                    disabled={pending}
-                    className="rounded-md border border-red-500/40 p-1.5 text-red-300 disabled:opacity-60"
-                    aria-label="Delete meal log"
+          <div className="max-h-48 space-y-2 overflow-auto pr-1">
+            <AnimatePresence initial={false}>
+              {stagedMeals.map((meal) => {
+                const isMoving = movingMealId === meal.id;
+
+                return (
+                  <motion.div
+                    key={meal.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -12 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 32 }}
+                    className="relative overflow-hidden rounded-md"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </article>
-              ))}
+                    <div className="pointer-events-none absolute inset-y-0 left-0 z-0 flex w-28 items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => moveStagedMealToPlanner(meal)}
+                        disabled={pending || isMoving}
+                        className="pointer-events-auto rounded-md border border-lime-500/40 bg-lime-500/15 px-2 py-1 text-[11px] font-semibold text-lime-200 disabled:opacity-50"
+                      >
+                        Add to Day
+                      </button>
+                    </div>
+
+                    <motion.article
+                      layout
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 144 }}
+                      dragElastic={0.1}
+                      dragMomentum={false}
+                      animate={{ x: revealedMealId === meal.id ? SWIPE_OPEN_X : 0 }}
+                      whileDrag={{ scale: 0.995 }}
+                      transition={{ type: "spring", stiffness: 360, damping: 30 }}
+                      onDragStart={() => {
+                        if (revealedMealId !== null && revealedMealId !== meal.id) {
+                          setRevealedMealId(null);
+                        }
+                      }}
+                      onDragEnd={(_, info) => {
+                        if (info.offset.x >= SWIPE_COMMIT_PX) {
+                          moveStagedMealToPlanner(meal);
+                          return;
+                        }
+
+                        if (info.offset.x >= SWIPE_REVEAL_PX) {
+                          setRevealedMealId(meal.id);
+                          return;
+                        }
+
+                        setRevealedMealId(null);
+                        setSnapBackMealId(meal.id);
+
+                        if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+                          navigator.vibrate(8);
+                        }
+
+                        window.setTimeout(() => {
+                          setSnapBackMealId((current) => (current === meal.id ? null : current));
+                        }, 200);
+                      }}
+                      onClick={() => {
+                        if (revealedMealId === meal.id) {
+                          setRevealedMealId(null);
+                        }
+                      }}
+                      className={`relative z-10 flex touch-pan-y items-center justify-between rounded-md border bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300 ${
+                        snapBackMealId === meal.id
+                          ? "border-lime-500/50 shadow-[0_0_0_1px_rgba(132,204,22,0.35)]"
+                          : "border-white/10"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-semibold text-zinc-100">{meal.meal_name}</p>
+                        <p>
+                          {Math.round(
+                            meal.calories +
+                              (meal.outside_calories ?? (meal.is_outside_food ? meal.calories : 0)) *
+                                (profile.hidden_calorie_buffer_percent / 100),
+                          )}{" "}
+                          kcal, {meal.protein}g protein
+                        </p>
+                        {meal.is_outside_food ? (
+                          <p className="text-[11px] text-amber-300">
+                            Outside Food +{profile.hidden_calorie_buffer_percent}% buffer
+                          </p>
+                        ) : null}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeMeal(meal.id);
+                        }}
+                        disabled={pending || isMoving}
+                        className="rounded-md border border-red-500/40 p-1.5 text-red-300 disabled:opacity-60"
+                        aria-label="Delete meal log"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </motion.article>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
           </div>
         </section>
 

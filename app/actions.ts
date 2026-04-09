@@ -149,6 +149,22 @@ const weeklyPlanSchema = z.object({
   ingredients: z.array(z.string().min(1).max(50)).max(20),
 });
 
+const moveMealToWeeklyPlanSchema = z.object({
+  meal_log_id: z.string().min(1),
+  day: z.enum([
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ]),
+  slot: z.enum(["Breakfast", "Lunch", "Dinner", "Snack"]),
+  meal_name: z.string().min(2).max(80),
+  ingredients: z.array(z.string().min(1).max(50)).max(20).optional(),
+});
+
 export type SettingsActionResult = {
   ok: boolean;
   profile?: FitnessProfile;
@@ -174,6 +190,12 @@ export type MealActionResult = {
 };
 
 export type WeeklyPlanActionResult = {
+  ok: boolean;
+  entry?: WeeklyPlanEntry;
+  error?: string;
+};
+
+export type MoveMealToWeeklyPlanActionResult = {
   ok: boolean;
   entry?: WeeklyPlanEntry;
   error?: string;
@@ -606,6 +628,51 @@ export async function upsertWeeklyPlanEntryAction(
   }
 
   const entry = await upsertWeeklyPlanEntry(parsed.data);
+
+  revalidatePath("/");
+  revalidatePath("/diet");
+
+  return {
+    ok: true,
+    entry,
+  };
+}
+
+export async function moveMealToWeeklyPlanAction(
+  payload: z.infer<typeof moveMealToWeeklyPlanSchema>,
+): Promise<MoveMealToWeeklyPlanActionResult> {
+  const parsed = moveMealToWeeklyPlanSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return { ok: false, error: "Invalid staged meal move payload" };
+  }
+
+  const { meal_log_id, day, slot, meal_name, ingredients } = parsed.data;
+
+  let entry: WeeklyPlanEntry;
+
+  try {
+    entry = await upsertWeeklyPlanEntry({
+      day,
+      slot,
+      meal_name,
+      ingredients: ingredients ?? [],
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to update weekly planner",
+    };
+  }
+
+  const deleted = await deleteMealLog(meal_log_id);
+
+  if (!deleted) {
+    return {
+      ok: false,
+      error: "Meal moved to planner but staged meal could not be removed",
+    };
+  }
 
   revalidatePath("/");
   revalidatePath("/diet");
