@@ -94,6 +94,7 @@ const mealSchema = z.object({
   meal_name: z.string().min(2).max(80),
   calories: z.number().min(0).max(3000),
   protein: z.number().min(0).max(250),
+  ingredients: z.array(z.string().min(1).max(80)).max(30).optional(),
   is_outside_food: z.boolean().default(false),
   outside_calories: z.number().min(0).max(5000).optional(),
   consumed_on: z.string().min(10).max(10),
@@ -146,6 +147,8 @@ const weeklyPlanSchema = z.object({
   ]),
   slot: z.enum(["Breakfast", "Lunch", "Dinner", "Snack"]),
   meal_name: z.string().max(80),
+  calories: z.number().min(0).max(5000).default(0),
+  protein: z.number().min(0).max(500).default(0),
   ingredients: z.array(z.string().min(1).max(50)).max(20),
 });
 
@@ -162,6 +165,8 @@ const moveMealToWeeklyPlanSchema = z.object({
   ]),
   slot: z.enum(["Breakfast", "Lunch", "Dinner", "Snack"]),
   meal_name: z.string().min(2).max(80),
+  calories: z.number().min(0).max(5000),
+  protein: z.number().min(0).max(500),
   ingredients: z.array(z.string().min(1).max(50)).max(20).optional(),
 });
 
@@ -424,7 +429,12 @@ export async function addMealLogAction(
 
   try {
     meal = await insertMealLog({
-      ...parsed.data,
+      meal_name: parsed.data.meal_name,
+      calories: parsed.data.calories,
+      protein: parsed.data.protein,
+      ingredients: parsed.data.ingredients ?? [],
+      is_outside_food: parsed.data.is_outside_food,
+      consumed_on: parsed.data.consumed_on,
       outside_calories: outsideCalories,
     });
   } catch (error) {
@@ -566,6 +576,7 @@ export async function logQuickSelectionAction(
     meal_name: mealName,
     calories,
     protein,
+    ingredients: foods.map((food) => food.name),
     consumed_on: parsed.data.consumed_on,
     is_outside_food: outsideCalories > 0,
     outside_calories: outsideCalories,
@@ -647,7 +658,7 @@ export async function moveMealToWeeklyPlanAction(
     return { ok: false, error: "Invalid staged meal move payload" };
   }
 
-  const { meal_log_id, day, slot, meal_name, ingredients } = parsed.data;
+  const { meal_log_id, day, slot, meal_name, calories, protein, ingredients } = parsed.data;
 
   let entry: WeeklyPlanEntry;
 
@@ -656,6 +667,8 @@ export async function moveMealToWeeklyPlanAction(
       day,
       slot,
       meal_name,
+      calories,
+      protein,
       ingredients: ingredients ?? [],
     });
   } catch (error) {

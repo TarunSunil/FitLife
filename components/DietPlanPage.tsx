@@ -26,6 +26,7 @@ type DietPlanPageProps = {
   profile: FitnessProfile;
   mealLogs: MealLog[];
   weeklyPlan: WeeklyPlanEntry[];
+  deletionConfirmationEnabled: boolean;
   onMealAdded: (meal: MealLog) => void;
   onMealDeleted: (mealId: string) => void;
   onPlanUpserted: (entry: WeeklyPlanEntry) => void;
@@ -74,6 +75,7 @@ export default function DietPlanPage({
   profile,
   mealLogs,
   weeklyPlan,
+  deletionConfirmationEnabled,
   onMealAdded,
   onMealDeleted,
   onPlanUpserted,
@@ -103,14 +105,27 @@ export default function DietPlanPage({
   const [plannerDay, setPlannerDay] = useState<(typeof DAYS)[number]>("Monday");
   const [plannerSlot, setPlannerSlot] = useState<(typeof SLOTS)[number]>("Breakfast");
   const [plannerMealName, setPlannerMealName] = useState("");
+  const [plannerCaloriesInput, setPlannerCaloriesInput] = useState("450");
+  const [plannerProteinInput, setPlannerProteinInput] = useState("30");
   const [plannerIngredients, setPlannerIngredients] = useState("");
   const [revealedMealId, setRevealedMealId] = useState<string | null>(null);
   const [snapBackMealId, setSnapBackMealId] = useState<string | null>(null);
   const [movingMealId, setMovingMealId] = useState<string | null>(null);
   const [selectedPlannerEntry, setSelectedPlannerEntry] = useState<WeeklyPlanEntry | null>(null);
+  const [editingPlannerEntry, setEditingPlannerEntry] = useState<WeeklyPlanEntry | null>(null);
+  const [editMealName, setEditMealName] = useState("");
+  const [editCaloriesInput, setEditCaloriesInput] = useState("0");
+  const [editProteinInput, setEditProteinInput] = useState("0");
+  const [editIngredients, setEditIngredients] = useState("");
 
   const hasPlannerContent = (entry: WeeklyPlanEntry | undefined) =>
-    Boolean(entry && (entry.meal_name.trim().length > 0 || entry.ingredients.length > 0));
+    Boolean(
+      entry &&
+        (entry.meal_name.trim().length > 0 ||
+          entry.ingredients.length > 0 ||
+          entry.calories > 0 ||
+          entry.protein > 0),
+    );
 
   const todaySummary = useMemo(
     () =>
@@ -134,6 +149,8 @@ export default function DietPlanPage({
 
   const mealCalories = Number.parseInt(mealCaloriesInput, 10) || 0;
   const mealProtein = Number.parseInt(mealProteinInput, 10) || 0;
+  const plannerCalories = Number.parseInt(plannerCaloriesInput, 10) || 0;
+  const plannerProtein = Number.parseInt(plannerProteinInput, 10) || 0;
 
   const weeklyEntriesByDay = useMemo(
     () =>
@@ -149,6 +166,21 @@ export default function DietPlanPage({
     [weeklyPlan],
   );
 
+  const plannerSummary = useMemo(() => {
+    const targetDay = dayFromDate(selectedDate);
+
+    return weeklyPlan
+      .filter((entry) => entry.day === targetDay && hasPlannerContent(entry))
+      .reduce(
+        (accumulator, entry) => ({
+          calories: accumulator.calories + Math.max(0, entry.calories),
+          protein: accumulator.protein + Math.max(0, entry.protein),
+          count: accumulator.count + 1,
+        }),
+        { calories: 0, protein: 0, count: 0 },
+      );
+  }, [selectedDate, weeklyPlan]);
+
   const addMeal = () => {
     setMessage(null);
     const outsideCalories = mealOutsideFood ? mealCalories : 0;
@@ -159,6 +191,7 @@ export default function DietPlanPage({
           meal_name: mealName,
           calories: mealCalories,
           protein: mealProtein,
+          ingredients: ingredientsToList(mealIngredients),
           is_outside_food: mealOutsideFood,
           outside_calories: outsideCalories,
           consumed_on: selectedDate,
@@ -185,6 +218,7 @@ export default function DietPlanPage({
               meal_name: mealName,
               calories: mealCalories,
               protein: mealProtein,
+              ingredients: ingredientsToList(mealIngredients),
               is_outside_food: mealOutsideFood,
               outside_calories: outsideCalories,
               consumed_on: selectedDate,
@@ -222,6 +256,8 @@ export default function DietPlanPage({
           day: detectedDay,
           slot: addToDaySlot,
           meal_name: mealName.trim(),
+          calories: mealCalories,
+          protein: mealProtein,
           ingredients,
         });
 
@@ -240,6 +276,8 @@ export default function DietPlanPage({
               day: detectedDay,
               slot: addToDaySlot,
               meal_name: mealName.trim(),
+              calories: mealCalories,
+              protein: mealProtein,
               ingredients,
             },
           });
@@ -279,6 +317,8 @@ export default function DietPlanPage({
           day: plannerDay,
           slot: plannerSlot,
           meal_name: plannerMealName,
+          calories: plannerCalories,
+          protein: plannerProtein,
           ingredients,
         });
 
@@ -297,6 +337,8 @@ export default function DietPlanPage({
               day: plannerDay,
               slot: plannerSlot,
               meal_name: plannerMealName,
+              calories: plannerCalories,
+              protein: plannerProtein,
               ingredients,
             },
           });
@@ -310,11 +352,17 @@ export default function DietPlanPage({
   };
 
   const clearPlannerSlot = (day: (typeof DAYS)[number], slot: (typeof SLOTS)[number]) => {
+    if (deletionConfirmationEnabled && !window.confirm(`Are you sure you want to delete ${day} - ${slot}?`)) {
+      return;
+    }
+
     startTransition(async () => {
       const result = await upsertWeeklyPlanEntryAction({
         day,
         slot,
         meal_name: "",
+        calories: 0,
+        protein: 0,
         ingredients: [],
       });
 
@@ -329,11 +377,42 @@ export default function DietPlanPage({
   };
 
   const editPlannerEntry = (entry: WeeklyPlanEntry) => {
-    setPlannerDay(entry.day as (typeof DAYS)[number]);
-    setPlannerSlot(entry.slot);
-    setPlannerMealName(entry.meal_name);
-    setPlannerIngredients(entry.ingredients.join(", "));
-    setMessage(`Loaded ${entry.day} - ${entry.slot} into planner editor`);
+    setEditingPlannerEntry(entry);
+    setEditMealName(entry.meal_name);
+    setEditCaloriesInput(String(entry.calories));
+    setEditProteinInput(String(entry.protein));
+    setEditIngredients(entry.ingredients.join(", "));
+    setMessage(`Editing ${entry.day} - ${entry.slot}`);
+  };
+
+  const saveEditedPlannerEntry = () => {
+    if (!editingPlannerEntry) {
+      return;
+    }
+
+    const nextCalories = Number.parseInt(editCaloriesInput, 10) || 0;
+    const nextProtein = Number.parseInt(editProteinInput, 10) || 0;
+    const nextIngredients = ingredientsToList(editIngredients);
+
+    startTransition(async () => {
+      const result = await upsertWeeklyPlanEntryAction({
+        day: editingPlannerEntry.day as (typeof DAYS)[number],
+        slot: editingPlannerEntry.slot,
+        meal_name: editMealName.trim(),
+        calories: nextCalories,
+        protein: nextProtein,
+        ingredients: nextIngredients,
+      });
+
+      if (!result.ok || !result.entry) {
+        setMessage(result.error ?? "Unable to update planner entry");
+        return;
+      }
+
+      onPlanUpserted(result.entry);
+      setEditingPlannerEntry(null);
+      setMessage(`Updated ${result.entry.day} - ${result.entry.slot}`);
+    });
   };
 
   const viewPlannerEntry = (entry: WeeklyPlanEntry) => {
@@ -387,6 +466,7 @@ export default function DietPlanPage({
           meal_name: verificationData.mealName,
           calories: verificationData.calories,
           protein: verificationData.protein,
+          ingredients: ingredientsToList(verificationData.ingredients),
           is_outside_food: false,
           outside_calories: 0,
           consumed_on: selectedDate,
@@ -432,7 +512,9 @@ export default function DietPlanPage({
           day: detectedDay,
           slot: addToDaySlot,
           meal_name: meal.meal_name,
-          ingredients: [],
+          calories: meal.calories,
+          protein: meal.protein,
+          ingredients: meal.ingredients,
         });
 
         if (!result.ok || !result.entry) {
@@ -662,10 +744,10 @@ export default function DietPlanPage({
           <div className="rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
             <p>Meals: {todaySummary.count}</p>
             <p>
-              Calories: {todaySummary.calories} / {profile.target_calories}
+              Staged Calories: {todaySummary.calories} / {profile.target_calories}
             </p>
             <p>
-              Protein: {todaySummary.protein}g / {profile.target_protein}g
+              Staged Protein: {todaySummary.protein}g / {profile.target_protein}g
             </p>
           </div>
 
@@ -791,7 +873,7 @@ export default function DietPlanPage({
       <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
         <h3 className="text-sm font-semibold text-zinc-200">Weekly Planner</h3>
 
-        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
           <label className="text-xs text-zinc-400">
             Day
             <select
@@ -829,6 +911,30 @@ export default function DietPlanPage({
               onChange={(event) => setPlannerMealName(event.target.value)}
               className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
               placeholder="Chicken Rice Prep"
+            />
+          </label>
+
+          <label className="text-xs text-zinc-400">
+            Calories
+            <input
+              type="number"
+              inputMode="numeric"
+              value={plannerCaloriesInput}
+              onChange={(event) => setPlannerCaloriesInput(normalizeNumericInput(event.target.value))}
+              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
+              placeholder="450"
+            />
+          </label>
+
+          <label className="text-xs text-zinc-400">
+            Protein (g)
+            <input
+              type="number"
+              inputMode="numeric"
+              value={plannerProteinInput}
+              onChange={(event) => setPlannerProteinInput(normalizeNumericInput(event.target.value))}
+              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
+              placeholder="30"
             />
           </label>
 
@@ -872,7 +978,7 @@ export default function DietPlanPage({
                       <p className="flex items-center justify-between gap-2">
                         <span className="text-sm text-zinc-100">
                           <span className="text-zinc-400">{slot}:</span>{" "}
-                          {entry ? `${entry.meal_name} | --g | --kcal` : "-"}
+                          {entry ? `${entry.meal_name} | ${entry.protein}g | ${entry.calories}kcal` : "-"}
                         </span>
                         {entry ? <Eye className="h-3.5 w-3.5 text-zinc-400" /> : null}
                       </p>
@@ -935,6 +1041,9 @@ export default function DietPlanPage({
               </div>
 
               <div className="mt-4 space-y-3 text-sm text-zinc-300">
+                <p className="text-zinc-200">
+                  {selectedPlannerEntry.meal_name} | {selectedPlannerEntry.protein}g | {selectedPlannerEntry.calories}kcal
+                </p>
                 <div className="rounded-xl border border-white/10 bg-black/60 p-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Ingredients</p>
                   {selectedPlannerEntry.ingredients.length ? (
@@ -950,9 +1059,7 @@ export default function DietPlanPage({
                   )}
                 </div>
 
-                <p className="text-xs text-zinc-500">
-                  Planner entries currently store the meal name and ingredients. If you want calories or protein shown here, the saved planner data needs to be extended.
-                </p>
+                <p className="text-xs text-zinc-500">Planner details are editable from the Edit button below.</p>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -983,6 +1090,103 @@ export default function DietPlanPage({
           </div>
         ) : null}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {editingPlannerEntry ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 p-4 shadow-2xl"
+            >
+              <div className="mb-3 flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-lime-300">
+                    Edit {editingPlannerEntry.day} - {editingPlannerEntry.slot}
+                  </p>
+                  <h4 className="mt-1 text-lg font-semibold text-white">Planner Entry</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingPlannerEntry(null)}
+                  className="rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 transition hover:bg-zinc-900"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="text-xs text-zinc-400 sm:col-span-2">
+                  Meal Name
+                  <input
+                    value={editMealName}
+                    onChange={(event) => setEditMealName(event.target.value)}
+                    className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
+                  />
+                </label>
+                <label className="text-xs text-zinc-400">
+                  Calories
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={editCaloriesInput}
+                    onChange={(event) => setEditCaloriesInput(normalizeNumericInput(event.target.value))}
+                    className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
+                  />
+                </label>
+                <label className="text-xs text-zinc-400">
+                  Protein (g)
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={editProteinInput}
+                    onChange={(event) => setEditProteinInput(normalizeNumericInput(event.target.value))}
+                    className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-1.5 text-sm text-white outline-none focus:border-lime-500"
+                  />
+                </label>
+                <label className="text-xs text-zinc-400 sm:col-span-2">
+                  Ingredients
+                  <textarea
+                    value={editIngredients}
+                    onChange={(event) => setEditIngredients(event.target.value)}
+                    rows={3}
+                    className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-2 text-sm text-zinc-100 outline-none focus:border-lime-500"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={saveEditedPlannerEntry}
+                  className="rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-black disabled:opacity-60"
+                  disabled={pending || editMealName.trim().length < 2}
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingPlannerEntry(null)}
+                  className="rounded-md border border-white/10 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
+
+      <div className="rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-300">
+        <p>
+          Daily Total Calories (staged + planner): {Math.round(todaySummary.calories + plannerSummary.calories)} / {profile.target_calories}
+        </p>
+        <p>
+          Daily Total Protein (staged + planner): {Math.round(todaySummary.protein + plannerSummary.protein)}g / {profile.target_protein}g
+        </p>
+      </div>
 
       {message ? <p className="text-xs text-zinc-300">{message}</p> : null}
     </section>

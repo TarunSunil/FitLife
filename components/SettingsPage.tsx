@@ -23,6 +23,8 @@ type SettingsInput = {
 type SettingsPageProps = {
   profile: FitnessProfile;
   onProfileChange: (nextProfile: FitnessProfile) => void;
+  deletionConfirmationEnabled: boolean;
+  onDeletionConfirmationChange: (next: boolean) => void;
 };
 
 function ToggleRow({
@@ -55,7 +57,12 @@ function ToggleRow({
   );
 }
 
-export default function SettingsPage({ profile, onProfileChange }: SettingsPageProps) {
+export default function SettingsPage({
+  profile,
+  onProfileChange,
+  deletionConfirmationEnabled,
+  onDeletionConfirmationChange,
+}: SettingsPageProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<SettingsInput>({
@@ -173,6 +180,17 @@ export default function SettingsPage({ profile, onProfileChange }: SettingsPageP
           label="Kettle"
           checked={draft.has_kettle}
           onChange={(has_kettle) => patch({ has_kettle })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+          Safety
+        </h3>
+        <ToggleRow
+          label="Confirm before deleting planner meal"
+          checked={deletionConfirmationEnabled}
+          onChange={onDeletionConfirmationChange}
         />
       </div>
 

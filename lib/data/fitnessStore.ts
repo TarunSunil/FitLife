@@ -80,6 +80,7 @@ function normalizeMealLog(log: Partial<MealLog>): MealLog {
     meal_name: log.meal_name ?? "Meal",
     calories,
     protein: log.protein ?? 0,
+    ingredients: Array.isArray(log.ingredients) ? log.ingredients : [],
     is_outside_food: isOutsideFood,
     outside_calories: Math.max(
       0,
@@ -121,6 +122,8 @@ function normalizePlanEntry(entry: Partial<WeeklyPlanEntry>): WeeklyPlanEntry {
     day: entry.day ?? "Monday",
     slot: entry.slot ?? "Breakfast",
     meal_name: entry.meal_name ?? "",
+    calories: Math.max(0, entry.calories ?? 0),
+    protein: Math.max(0, entry.protein ?? 0),
     ingredients: Array.isArray(entry.ingredients) ? entry.ingredients : [],
     updated_at: entry.updated_at ?? new Date().toISOString(),
   };

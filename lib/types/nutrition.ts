@@ -4,6 +4,7 @@ export type MealLog = {
   meal_name: string;
   calories: number;
   protein: number;
+  ingredients: string[];
   is_outside_food: boolean;
   outside_calories: number;
   consumed_on: string;
@@ -44,6 +45,8 @@ export type WeeklyPlanEntry = {
   day: string;
   slot: "Breakfast" | "Lunch" | "Dinner" | "Snack";
   meal_name: string;
+  calories: number;
+  protein: number;
   ingredients: string[];
   updated_at: string;
 };

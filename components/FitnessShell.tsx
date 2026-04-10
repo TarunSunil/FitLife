@@ -26,6 +26,11 @@ import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
 import type { MealLog, WeeklyPlanEntry } from "@/lib/types/nutrition";
 
 const PROFILE_SYNC_KEY = "fitlife:profile";
+const PREFERENCES_SYNC_KEY = "fitlife:preferences";
+
+type AppPreferences = {
+  deletion_confirmation_enabled: boolean;
+};
 
 function readStoredProfile(): FitnessProfile | null {
   if (typeof window === "undefined") {
@@ -40,6 +45,24 @@ function readStoredProfile(): FitnessProfile | null {
     }
 
     return JSON.parse(raw) as FitnessProfile;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredPreferences(): AppPreferences | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PREFERENCES_SYNC_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as AppPreferences;
   } catch {
     return null;
   }
@@ -69,6 +92,9 @@ export default function FitnessShell({
   const [logs, setLogs] = useState(initialLogs);
   const [mealLogs, setMealLogs] = useState(initialMealLogs);
   const [weeklyPlan, setWeeklyPlan] = useState(initialWeeklyPlan);
+  const [preferences, setPreferences] = useState<AppPreferences>({
+    deletion_confirmation_enabled: true,
+  });
   const [isOnline, setIsOnline] = useState(true);
   const [syncStatus, setSyncStatus] = useState("Synced");
 
@@ -77,6 +103,14 @@ export default function FitnessShell({
 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(PROFILE_SYNC_KEY, JSON.stringify(nextProfile));
+    }
+  }, []);
+
+  const syncPreferences = useCallback((nextPreferences: AppPreferences) => {
+    setPreferences(nextPreferences);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(PREFERENCES_SYNC_KEY, JSON.stringify(nextPreferences));
     }
   }, []);
 
@@ -99,25 +133,42 @@ export default function FitnessShell({
   }, [initialProfile]);
 
   useEffect(() => {
+    const storedPreferences = readStoredPreferences();
+
+    if (storedPreferences) {
+      setPreferences(storedPreferences);
+    }
+  }, []);
+
+  useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== PROFILE_SYNC_KEY || !event.newValue) {
+      if (event.key === PROFILE_SYNC_KEY && event.newValue) {
+        try {
+          const nextProfile = JSON.parse(event.newValue) as FitnessProfile;
+          setProfile((current) => {
+            const nextTimestamp = Date.parse(nextProfile.updated_at);
+            const currentTimestamp = Date.parse(current.updated_at);
+
+            if (!Number.isNaN(nextTimestamp) && !Number.isNaN(currentTimestamp)) {
+              return nextTimestamp >= currentTimestamp ? nextProfile : current;
+            }
+
+            return nextProfile;
+          });
+        } catch {
+          // Ignore malformed storage payloads.
+        }
+
         return;
       }
 
-      try {
-        const nextProfile = JSON.parse(event.newValue) as FitnessProfile;
-        setProfile((current) => {
-          const nextTimestamp = Date.parse(nextProfile.updated_at);
-          const currentTimestamp = Date.parse(current.updated_at);
-
-          if (!Number.isNaN(nextTimestamp) && !Number.isNaN(currentTimestamp)) {
-            return nextTimestamp >= currentTimestamp ? nextProfile : current;
-          }
-
-          return nextProfile;
-        });
-      } catch {
-        // Ignore malformed storage payloads.
+      if (event.key === PREFERENCES_SYNC_KEY && event.newValue) {
+        try {
+          const nextPreferences = JSON.parse(event.newValue) as AppPreferences;
+          setPreferences(nextPreferences);
+        } catch {
+          // Ignore malformed storage payloads.
+        }
       }
     };
 
@@ -294,6 +345,7 @@ export default function FitnessShell({
             profile={profile}
             mealLogs={mealLogs}
             weeklyPlan={weeklyPlan}
+            deletionConfirmationEnabled={preferences.deletion_confirmation_enabled}
             onMealAdded={(meal) => setMealLogs((current) => [meal, ...current])}
             onMealDeleted={(mealId) =>
               setMealLogs((current) => current.filter((meal) => meal.id !== mealId))
@@ -302,6 +354,8 @@ export default function FitnessShell({
               setWeeklyPlan((current) => {
                 const isClearedEntry =
                   entry.meal_name.trim().length === 0 &&
+                  entry.calories === 0 &&
+                  entry.protein === 0 &&
                   (!entry.ingredients || entry.ingredients.length === 0);
 
                 if (isClearedEntry) {
@@ -327,7 +381,17 @@ export default function FitnessShell({
 
       {mode === "settings" ? (
         <div className="mx-auto max-w-2xl px-4 pb-24 pt-6">
-          <SettingsPage profile={profile} onProfileChange={syncProfile} />
+          <SettingsPage
+            profile={profile}
+            onProfileChange={syncProfile}
+            deletionConfirmationEnabled={preferences.deletion_confirmation_enabled}
+            onDeletionConfirmationChange={(next) =>
+              syncPreferences({
+                ...preferences,
+                deletion_confirmation_enabled: next,
+              })
+            }
+          />
         </div>
       ) : null}
 

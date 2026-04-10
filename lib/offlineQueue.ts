@@ -23,6 +23,7 @@ export type OfflineQueueItem =
         meal_name: string;
         calories: number;
         protein: number;
+        ingredients?: string[];
         is_outside_food: boolean;
         outside_calories?: number;
         consumed_on: string;
@@ -43,6 +44,8 @@ export type OfflineQueueItem =
         day: "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
         slot: "Breakfast" | "Lunch" | "Dinner" | "Snack";
         meal_name: string;
+        calories?: number;
+        protein?: number;
         ingredients: string[];
       };
     }
