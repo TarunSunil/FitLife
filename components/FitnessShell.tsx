@@ -300,6 +300,16 @@ export default function FitnessShell({
             }
             onPlanUpserted={(entry) =>
               setWeeklyPlan((current) => {
+                const isClearedEntry =
+                  entry.meal_name.trim().length === 0 &&
+                  (!entry.ingredients || entry.ingredients.length === 0);
+
+                if (isClearedEntry) {
+                  return current.filter(
+                    (item) => !(item.day === entry.day && item.slot === entry.slot),
+                  );
+                }
+
                 const index = current.findIndex((item) => item.id === entry.id);
 
                 if (index === -1) {

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, ChefHat, ListPlus, PencilLine, Trash2, Upload } from "lucide-react";
+import { Camera, ChefHat, Eye, ListPlus, PencilLine, Trash2, Upload } from "lucide-react";
 
 import {
   addMealLogAction,
@@ -12,7 +12,6 @@ import {
   upsertWeeklyPlanEntryAction,
 } from "@/app/actions";
 import {
-  buildDietShoppingList,
   summarizeDailyMeals,
 } from "@/lib/domain/profileRules";
 import { enqueue } from "@/lib/offlineQueue";
@@ -108,8 +107,10 @@ export default function DietPlanPage({
   const [revealedMealId, setRevealedMealId] = useState<string | null>(null);
   const [snapBackMealId, setSnapBackMealId] = useState<string | null>(null);
   const [movingMealId, setMovingMealId] = useState<string | null>(null);
+  const [selectedPlannerEntry, setSelectedPlannerEntry] = useState<WeeklyPlanEntry | null>(null);
 
-  const shoppingList = useMemo(() => buildDietShoppingList(profile, weeklyPlan), [profile, weeklyPlan]);
+  const hasPlannerContent = (entry: WeeklyPlanEntry | undefined) =>
+    Boolean(entry && (entry.meal_name.trim().length > 0 || entry.ingredients.length > 0));
 
   const todaySummary = useMemo(
     () =>
@@ -140,7 +141,9 @@ export default function DietPlanPage({
         day,
         slots: SLOTS.map((slot) => ({
           slot,
-          entry: weeklyPlan.find((item) => item.day === day && item.slot === slot),
+          entry: weeklyPlan.find(
+            (item) => item.day === day && item.slot === slot && hasPlannerContent(item),
+          ),
         })),
       })),
     [weeklyPlan],
@@ -331,6 +334,10 @@ export default function DietPlanPage({
     setPlannerMealName(entry.meal_name);
     setPlannerIngredients(entry.ingredients.join(", "));
     setMessage(`Loaded ${entry.day} - ${entry.slot} into planner editor`);
+  };
+
+  const viewPlannerEntry = (entry: WeeklyPlanEntry) => {
+    setSelectedPlannerEntry(entry);
   };
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -740,14 +747,17 @@ export default function DietPlanPage({
                       }`}
                     >
                       <div>
-                        <p className="font-semibold text-zinc-100">{meal.meal_name}</p>
-                        <p>
-                          {Math.round(
-                            meal.calories +
-                              (meal.outside_calories ?? (meal.is_outside_food ? meal.calories : 0)) *
-                                (profile.hidden_calorie_buffer_percent / 100),
-                          )}{" "}
-                          kcal, {meal.protein}g protein
+                        <p className="text-sm font-semibold text-zinc-100">
+                          {meal.meal_name}
+                          <span className="text-[#808080]">
+                            {" "}
+                            | {meal.protein}g | {Math.round(
+                              meal.calories +
+                                (meal.outside_calories ?? (meal.is_outside_food ? meal.calories : 0)) *
+                                  (profile.hidden_calorie_buffer_percent / 100),
+                            )}
+                            kcal
+                          </span>
                         </p>
                         {meal.is_outside_food ? (
                           <p className="text-[11px] text-amber-300">
@@ -848,13 +858,28 @@ export default function DietPlanPage({
               <p className="mb-2 font-semibold text-zinc-100">{day}</p>
               <ul className="space-y-2 text-zinc-300">
                 {slots.map(({ slot, entry }) => (
-                  <li key={`${day}-${slot}`} className="rounded border border-white/10 bg-black/60 p-2">
-                    <p>
-                      <span className="text-zinc-400">{slot}:</span> {entry?.meal_name || "-"}
-                    </p>
-                    {entry?.ingredients?.length ? (
-                      <p className="mt-1 text-[11px] text-zinc-500">{entry.ingredients.join(", ")}</p>
-                    ) : null}
+                  <li key={`${day}-${slot}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (entry) {
+                          viewPlannerEntry(entry);
+                        }
+                      }}
+                      disabled={!entry}
+                      className="w-full rounded border border-white/10 bg-black/60 p-2 text-left transition hover:border-lime-500/40 hover:bg-zinc-950 disabled:cursor-default disabled:opacity-70"
+                    >
+                      <p className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-zinc-100">
+                          <span className="text-zinc-400">{slot}:</span>{" "}
+                          {entry ? `${entry.meal_name} | --g | --kcal` : "-"}
+                        </span>
+                        {entry ? <Eye className="h-3.5 w-3.5 text-zinc-400" /> : null}
+                      </p>
+                      {entry?.ingredients?.length ? (
+                        <p className="mt-1 text-[11px] text-zinc-500">{entry.ingredients.join(", ")}</p>
+                      ) : null}
+                    </button>
                     {entry ? (
                       <div className="mt-2 flex items-center gap-2">
                         <button
@@ -883,16 +908,81 @@ export default function DietPlanPage({
         </div>
       </section>
 
-      <section className="space-y-2 rounded-xl border border-white/10 bg-black/60 p-3">
-        <h3 className="text-sm font-semibold text-zinc-200">Auto Shopping List</h3>
-        <ul className="flex flex-wrap gap-2 text-xs">
-          {shoppingList.map((item) => (
-            <li key={item} className="rounded-full border border-white/15 px-2 py-1 text-zinc-200">
-              {item}
-            </li>
-          ))}
-        </ul>
-      </section>
+      <AnimatePresence>
+        {selectedPlannerEntry ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-6 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 12 }}
+              transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              className="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950 p-4 shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-lime-300">
+                    {selectedPlannerEntry.day} - {selectedPlannerEntry.slot}
+                  </p>
+                  <h4 className="mt-1 text-lg font-semibold text-white">{selectedPlannerEntry.meal_name}</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlannerEntry(null)}
+                  className="rounded-md border border-white/10 px-2 py-1 text-xs text-zinc-300 transition hover:bg-zinc-900"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-sm text-zinc-300">
+                <div className="rounded-xl border border-white/10 bg-black/60 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Ingredients</p>
+                  {selectedPlannerEntry.ingredients.length ? (
+                    <ul className="mt-2 space-y-2">
+                      {selectedPlannerEntry.ingredients.map((ingredient) => (
+                        <li key={ingredient} className="rounded-lg border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-zinc-200">
+                          {ingredient}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-zinc-500">No ingredients were saved with this planner entry.</p>
+                  )}
+                </div>
+
+                <p className="text-xs text-zinc-500">
+                  Planner entries currently store the meal name and ingredients. If you want calories or protein shown here, the saved planner data needs to be extended.
+                </p>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    editPlannerEntry(selectedPlannerEntry);
+                    setSelectedPlannerEntry(null);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-white/15 px-3 py-2 text-sm text-zinc-200 transition hover:bg-zinc-900"
+                >
+                  <PencilLine className="h-3.5 w-3.5" />
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearPlannerSlot(selectedPlannerEntry.day as (typeof DAYS)[number], selectedPlannerEntry.slot);
+                    setSelectedPlannerEntry(null);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-3 py-2 text-sm text-red-300 transition hover:bg-red-500/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        ) : null}
+      </AnimatePresence>
 
       {message ? <p className="text-xs text-zinc-300">{message}</p> : null}
     </section>

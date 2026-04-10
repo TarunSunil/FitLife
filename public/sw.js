@@ -1,10 +1,11 @@
-const CACHE_NAME = "obsidian-fit-cache-v2";
-const STATIC_ASSETS = ["/", "/manifest.json", "/favicon.ico"];
+const CACHE_NAME = "obsidian-fit-cache-v3";
+const STATIC_ASSETS = ["/manifest.json", "/favicon.ico"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)),
   );
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -17,6 +18,7 @@ self.addEventListener("activate", (event) => {
       ),
     ),
   );
+  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
@@ -29,14 +31,20 @@ self.addEventListener("fetch", (event) => {
   // Always prefer network for page navigations so Server Action payloads stay fresh after deploys.
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match("/")),
+      fetch(event.request).catch(() =>
+        new Response("Offline", {
+          status: 503,
+          statusText: "Offline",
+          headers: { "Content-Type": "text/plain" },
+        }),
+      ),
     );
     return;
   }
 
   const isSameOrigin = requestUrl.origin === self.location.origin;
   const isCacheableStatic =
-    requestUrl.pathname.startsWith("/_next/") || STATIC_ASSETS.includes(requestUrl.pathname);
+    STATIC_ASSETS.includes(requestUrl.pathname);
 
   if (!isSameOrigin || !isCacheableStatic) {
     return;
