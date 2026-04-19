@@ -6,7 +6,6 @@ import { Camera, ChefHat, Eye, ListPlus, PencilLine, Trash2, Upload } from "luci
 
 import {
   addMealLogAction,
-  analyzeMealImageAction,
   deleteMealLogAction,
   moveMealToWeeklyPlanAction,
   upsertWeeklyPlanEntryAction,
@@ -71,6 +70,29 @@ function normalizeNumericInput(raw: string): string {
   return digitsOnly.replace(/^0+(?=\d)/, "");
 }
 
+const ADJUSTMENT_MIN = 0.8;
+const ADJUSTMENT_MAX = 1.2;
+const ADJUSTMENT_STEP = 0.05;
+
+type PgAwareScanPayload = {
+  dish_name: string;
+  ingredients: string;
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fats_g: number;
+};
+
+function scaleNutritionItems(items: AnalyzedNutritionItem[], multiplier: number): AnalyzedNutritionItem[] {
+  return items.map((item) => ({
+    ...item,
+    calories: Math.round(item.calories * multiplier),
+    protein: Math.round(item.protein * multiplier),
+    carbs: Math.round(item.carbs * multiplier),
+    fats: Math.round(item.fats * multiplier),
+  }));
+}
+
 export default function DietPlanPage({
   profile,
   mealLogs,
@@ -101,6 +123,7 @@ export default function DietPlanPage({
     confidence: "High" | "Low";
     nutritionItems: AnalyzedNutritionItem[];
   } | null>(null);
+  const [adjustmentMultiplier, setAdjustmentMultiplier] = useState(1);
 
   const [plannerDay, setPlannerDay] = useState<(typeof DAYS)[number]>("Monday");
   const [plannerSlot, setPlannerSlot] = useState<(typeof SLOTS)[number]>("Breakfast");
@@ -180,6 +203,23 @@ export default function DietPlanPage({
         { calories: 0, protein: 0, count: 0 },
       );
   }, [selectedDate, weeklyPlan]);
+
+  const adjustedVerificationData = useMemo(() => {
+    if (!verificationData) {
+      return null;
+    }
+
+    return {
+      ...verificationData,
+      calories: Math.round(verificationData.calories * adjustmentMultiplier),
+      protein: Math.round(verificationData.protein * adjustmentMultiplier),
+      nutritionItems: scaleNutritionItems(verificationData.nutritionItems, adjustmentMultiplier),
+    };
+  }, [verificationData, adjustmentMultiplier]);
+
+  const scanEndpoint = process.env.NEXT_PUBLIC_FASTAPI_URL
+    ? `${process.env.NEXT_PUBLIC_FASTAPI_URL.replace(/\/$/, "")}/scan`
+    : "";
 
   const addMeal = () => {
     setMessage(null);
@@ -423,23 +463,66 @@ export default function DietPlanPage({
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (!scanEndpoint) {
+      setMessage("Missing NEXT_PUBLIC_FASTAPI_URL. Please update your env and restart.");
+      event.target.value = "";
+      return;
+    }
+
     setAnalyzingImg(true);
     setMessage("Analyzing your meal...");
 
     const formData = new FormData();
-    formData.append("image", file);
+    formData.append("file", file);
 
     startTransition(async () => {
       try {
-        const result = await analyzeMealImageAction(formData);
+        const response = await fetch(scanEndpoint, {
+          method: "POST",
+          body: formData,
+        });
 
-        if (!result.ok || !result.data) {
-          setMessage(result.error ?? "Unable to analyze meal image");
+        if (!response.ok) {
+          const errorText = await response.text();
+          setMessage(errorText || "Unable to analyze meal image");
           return;
         }
 
-        setVerificationData(result.data);
-        setMealIngredients(result.data.ingredients);
+        const payload = (await response.json()) as Partial<PgAwareScanPayload>;
+        if (
+          !payload.dish_name ||
+          typeof payload.calories !== "number" ||
+          typeof payload.protein_g !== "number" ||
+          typeof payload.carbs_g !== "number" ||
+          typeof payload.fats_g !== "number"
+        ) {
+          setMessage("Scan response format is invalid.");
+          return;
+        }
+
+        const calories = Math.max(0, Math.round(payload.calories));
+        const protein = Math.max(0, Math.round(payload.protein_g));
+        const carbs = Math.max(0, Math.round(payload.carbs_g));
+        const fats = Math.max(0, Math.round(payload.fats_g));
+
+        setVerificationData({
+          mealName: payload.dish_name,
+          calories,
+          protein,
+          ingredients: payload.ingredients ?? payload.dish_name,
+          confidence: "Low",
+          nutritionItems: [
+            {
+              name: payload.dish_name,
+              calories,
+              protein,
+              carbs,
+              fats,
+            },
+          ],
+        });
+        setAdjustmentMultiplier(1);
+        setMealIngredients(payload.ingredients ?? payload.dish_name);
         setMessage("Analysis complete");
       } catch {
         setMessage("Unable to process image right now. Please try again.");
@@ -452,25 +535,25 @@ export default function DietPlanPage({
   };
 
   const confirmVerifiedMeal = () => {
-    if (!verificationData) return;
+    if (!adjustedVerificationData) return;
 
-    setMealName(verificationData.mealName);
-    setMealCaloriesInput(String(verificationData.calories));
-    setMealProteinInput(String(verificationData.protein));
+    setMealName(adjustedVerificationData.mealName);
+    setMealCaloriesInput(String(adjustedVerificationData.calories));
+    setMealProteinInput(String(adjustedVerificationData.protein));
     setMealOutsideFood(false);
-    setMealIngredients(verificationData.ingredients);
+    setMealIngredients(adjustedVerificationData.ingredients);
 
     startTransition(async () => {
       try {
         const result = await addMealLogAction({
-          meal_name: verificationData.mealName,
-          calories: verificationData.calories,
-          protein: verificationData.protein,
-          ingredients: ingredientsToList(verificationData.ingredients),
+          meal_name: adjustedVerificationData.mealName,
+          calories: adjustedVerificationData.calories,
+          protein: adjustedVerificationData.protein,
+          ingredients: ingredientsToList(adjustedVerificationData.ingredients),
           is_outside_food: false,
           outside_calories: 0,
           consumed_on: selectedDate,
-          nutrition_items: verificationData.nutritionItems,
+          nutrition_items: adjustedVerificationData.nutritionItems,
         });
 
         if (result.ok && result.meal) {
@@ -481,18 +564,20 @@ export default function DietPlanPage({
         }
       } finally {
         setVerificationData(null);
+        setAdjustmentMultiplier(1);
       }
     });
   };
 
   const rejectVerifiedMeal = () => {
-    if (!verificationData) return;
+    if (!adjustedVerificationData) return;
 
-    setMealName(verificationData.mealName);
-    setMealCaloriesInput(String(verificationData.calories));
-    setMealProteinInput(String(verificationData.protein));
+    setMealName(adjustedVerificationData.mealName);
+    setMealCaloriesInput(String(adjustedVerificationData.calories));
+    setMealProteinInput(String(adjustedVerificationData.protein));
     setMessage("Auto-fill complete. Please review inputs.");
     setVerificationData(null);
+    setAdjustmentMultiplier(1);
   };
 
   const moveStagedMealToPlanner = (meal: MealLog) => {
@@ -539,7 +624,7 @@ export default function DietPlanPage({
 
   return (
     <section className="space-y-4 rounded-2xl border border-white/10 bg-zinc-950/80 p-4">
-      {verificationData ? (
+      {verificationData && adjustedVerificationData ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
             <h3 className="mb-2 text-lg font-semibold text-white">Verification Prompt</h3>
@@ -547,12 +632,24 @@ export default function DietPlanPage({
               <p className="mb-3 text-xs font-semibold text-amber-400">Low Confidence. Please verify this dish.</p>
             ) : null}
             <p className="text-sm text-zinc-300">
-              Is this <strong>{verificationData.mealName}</strong>?
+              Is this <strong>{adjustedVerificationData.mealName}</strong>?
             </p>
+            <label className="mt-3 block text-xs text-zinc-400">
+              PG Adjustment: {adjustmentMultiplier.toFixed(2)}x
+              <input
+                type="range"
+                min={ADJUSTMENT_MIN}
+                max={ADJUSTMENT_MAX}
+                step={ADJUSTMENT_STEP}
+                value={adjustmentMultiplier}
+                onChange={(event) => setAdjustmentMultiplier(Number(event.target.value))}
+                className="mt-2 w-full accent-lime-500"
+              />
+            </label>
             <div className="my-4 rounded border border-white/10 bg-black p-3 text-xs text-zinc-400">
-              <p>Calories: {verificationData.calories} kcal</p>
-              <p>Protein: {verificationData.protein}g</p>
-              <p className="mt-1 wrap-break-word">Identified: {verificationData.ingredients}</p>
+              <p>Calories: {adjustedVerificationData.calories} kcal</p>
+              <p>Protein: {adjustedVerificationData.protein}g</p>
+              <p className="mt-1 wrap-break-word">Identified: {adjustedVerificationData.ingredients}</p>
             </div>
             <div className="flex items-center gap-3">
               <button

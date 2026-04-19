@@ -32,6 +32,20 @@ Apply the nutrition schema migration in your Supabase project:
 1. Open the SQL editor.
 2. Run the SQL from `supabase/migrations/20260327_add_nutrition_tables.sql`.
 
+### Meal Scan Analyzer (PG-Aware FastAPI)
+
+Meal image analysis now calls FastAPI directly from the diet scan UI.
+
+Required frontend env variable:
+
+- `NEXT_PUBLIC_FASTAPI_URL`
+
+Backend env variables (inside `backend/.env`):
+
+- `GEMINI_KEY_A`
+- `GEMINI_KEY_B`
+- `ALLOWED_ORIGINS` (optional)
+
 ### Quality checks
 
 ```bash
