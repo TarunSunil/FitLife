@@ -34,17 +34,29 @@ Apply the nutrition schema migration in your Supabase project:
 
 ### Meal Scan Analyzer (PG-Aware FastAPI)
 
-Meal image analysis now calls FastAPI directly from the diet scan UI.
+Meal image analysis calls FastAPI through a Next.js server action so the browser avoids CORS issues and the app can rate-limit scan usage.
 
-Required frontend env variable:
+Required Next.js env variable:
 
-- `NEXT_PUBLIC_FASTAPI_URL`
+- `FASTAPI_SCAN_URL` or `NEXT_PUBLIC_FASTAPI_URL`
+
+Quick Log uploads currently support: `JPG/JPEG`, `PNG`, and `WEBP`.
+
+Quick Log requires both services running locally:
+
+1. Next.js app (`npm run dev`) on `http://localhost:3000`
+2. FastAPI scanner (`uvicorn app.main:app --reload --port 8000`) from `backend/`
+
+If FastAPI is down, Quick Log will fail with a connection error.
 
 Backend env variables (inside `backend/.env`):
 
 - `GEMINI_KEY_A`
 - `GEMINI_KEY_B`
 - `ALLOWED_ORIGINS` (optional)
+- `GEMINI_MODELS` (optional comma-separated fallback order)
+- `MAX_NORMALIZED_IMAGE_EDGE` (optional, default `1280`)
+- `NORMALIZED_JPEG_QUALITY` (optional, default `82`)
 
 ### Quality checks
 

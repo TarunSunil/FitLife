@@ -36,3 +36,17 @@ uvicorn app.main:app --reload --port 8000
 
 - POST /scan (multipart/form-data with file field named `file`)
 - GET /health
+
+## Supported Upload Formats
+
+- image/jpeg (.jpg/.jpeg)
+- image/png (.png)
+- image/webp (.webp)
+
+Max upload size: 8 MB.
+
+## Quick Validation
+
+1. Start backend with uvicorn.
+2. Open `http://127.0.0.1:8000/health` and verify `{ "status": "ok" }`.
+3. Upload a JPG/PNG/WEBP through FitLife Diet page Quick Log.

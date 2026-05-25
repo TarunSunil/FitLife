@@ -18,8 +18,6 @@ import {
   updateProfile,
   updateWorkoutLog,
   upsertWeeklyPlanEntry,
-  uploadTempImage,
-  deleteTempImage,
 } from "@/lib/data/fitnessStore";
 import { isTempoRequired } from "@/lib/domain/profileRules";
 import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
@@ -31,10 +29,12 @@ import type {
   WeeklyPlanEntry,
 } from "@/lib/types/nutrition";
 
-const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp"];
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const ANALYSIS_RATE_WINDOW_MS = 60_000;
 const ANALYSIS_RATE_LIMIT = 10;
+const ANALYSIS_TIMEOUT_MS = 30_000;
+const ANALYSIS_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 const globalRateStore = globalThis as typeof globalThis & {
   __MEAL_ANALYSIS_RATE__?: { windowStart: number; count: number };
@@ -170,6 +170,15 @@ const moveMealToWeeklyPlanSchema = z.object({
   ingredients: z.array(z.string().min(1).max(50)).max(20).optional(),
 });
 
+const fastApiScanResponseSchema = z.object({
+  dish_name: z.string().min(1),
+  ingredients: z.union([z.string(), z.array(z.string())]).optional(),
+  calories: z.number(),
+  protein_g: z.number(),
+  carbs_g: z.number(),
+  fats_g: z.number(),
+});
+
 export type SettingsActionResult = {
   ok: boolean;
   profile?: FitnessProfile;
@@ -237,6 +246,96 @@ export type AnalyzeMealResult = {
   };
 };
 
+function getMealAnalyzerEndpoint(): string | null {
+  const configuredUrl =
+    process.env.FASTAPI_SCAN_URL ??
+    process.env.FASTAPI_MEAL_ANALYZER_URL ??
+    process.env.NEXT_PUBLIC_FASTAPI_URL;
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  const trimmed = configuredUrl.trim().replace(/\/$/, "");
+  if (trimmed.endsWith("/scan") || trimmed.endsWith("/analyze-meal")) {
+    return trimmed;
+  }
+
+  return `${trimmed}/scan`;
+}
+
+function normalizeFastApiIngredients(raw: string | string[] | undefined, fallback: string): string {
+  if (Array.isArray(raw)) {
+    const ingredients = raw.map((item) => item.trim()).filter(Boolean);
+    return ingredients.length ? ingredients.join(", ") : fallback;
+  }
+
+  if (typeof raw === "string" && raw.trim().length) {
+    return raw.trim();
+  }
+
+  return fallback;
+}
+
+async function postMealImageForAnalysis(endpoint: string, file: File): Promise<Response> {
+  const maxAttempts = 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+    const body = new FormData();
+    body.append("file", file, file.name);
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        body,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok || !ANALYSIS_RETRY_STATUSES.has(response.status) || attempt === maxAttempts) {
+        return response;
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (attempt === maxAttempts) {
+        if (error instanceof Error && error.name === "AbortError") {
+          throw new Error("Image analysis timed out. Please try a smaller image or retry.");
+        }
+
+        throw error;
+      }
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 300 * attempt);
+    });
+  }
+
+  throw new Error("Unexpected analyzer retry flow state");
+}
+
+async function readFastApiError(response: Response): Promise<string> {
+  const rawText = await response.text();
+  if (!rawText.trim()) {
+    return response.statusText || "Unable to analyze meal image";
+  }
+
+  try {
+    const parsed = JSON.parse(rawText) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim().length) {
+      return parsed.detail.trim();
+    }
+  } catch {
+    // Keep raw text fallback when backend does not return JSON.
+  }
+
+  return rawText.trim();
+}
+
 export async function analyzeMealImageAction(formData: FormData): Promise<AnalyzeMealResult> {
   const file = formData.get("image") as File | null;
   if (!file) return { ok: false, error: "No image file provided" };
@@ -260,27 +359,54 @@ export async function analyzeMealImageAction(formData: FormData): Promise<Analyz
     };
   }
 
-  const fileId = crypto.randomUUID() + "-" + file.name;
-  let isUploaded = false;
+  const endpoint = getMealAnalyzerEndpoint();
+  if (!endpoint) {
+    return {
+      ok: false,
+      error: "Missing FastAPI scan URL. Set FASTAPI_SCAN_URL or NEXT_PUBLIC_FASTAPI_URL.",
+    };
+  }
 
   try {
-    // 1. Storage - Upload to temp directory
-    const uploadRes = await uploadTempImage(file, fileId);
-    if (uploadRes) isUploaded = true;
-    else {
-      console.error("[meal-analyzer] temp upload failed before AI run", { fileId, mimeType, size: file.size });
+    const response = await postMealImageForAnalysis(endpoint, file);
+    if (!response.ok) {
+      return { ok: false, error: await readFastApiError(response) };
     }
 
-    // 2. AI Pipeline
-    const arrayBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    const raw = await response.json();
+    const parsed = fastApiScanResponseSchema.safeParse(raw);
+    if (!parsed.success) {
+      console.error("[meal-analyzer] invalid fastapi response", parsed.error.flatten());
+      return { ok: false, error: "Scan response format is invalid." };
+    }
 
-    // Dynamic import to avoid bloating client builds
-    const { analyzeMealWithAIs } = await import("@/lib/domain/mealAnalyzer");
-    const result = await analyzeMealWithAIs(base64, mimeType);
+    const payload = parsed.data;
+    const dishName = payload.dish_name.trim();
+    const calories = Math.max(0, Math.round(payload.calories));
+    const protein = Math.max(0, Math.round(payload.protein_g));
+    const carbs = Math.max(0, Math.round(payload.carbs_g));
+    const fats = Math.max(0, Math.round(payload.fats_g));
+    const nutritionItems: AnalyzedNutritionItem[] = [
+      {
+        name: dishName,
+        calories,
+        protein,
+        carbs,
+        fats,
+      },
+    ];
+
+    const result = {
+      mealName: dishName,
+      calories,
+      protein,
+      ingredients: normalizeFastApiIngredients(payload.ingredients, dishName),
+      confidence: "Low" as const,
+      nutritionItems,
+    };
 
     console.log("[meal-analyzer] analysis success", {
-      fileId,
+      endpoint,
       confidence: result.confidence,
       mealName: result.mealName,
     });
@@ -288,19 +414,10 @@ export async function analyzeMealImageAction(formData: FormData): Promise<Analyz
     return { ok: true, data: result };
   } catch (error) {
     console.error("[meal-analyzer] analysis failure", {
-      fileId,
       mimeType,
       error: error instanceof Error ? error.message : String(error),
     });
     return { ok: false, error: error instanceof Error ? error.message : "AI Analysis failed" };
-  } finally {
-    // 3. Cleanup (Discard on Success/Failure)
-    if (isUploaded) {
-      const deleted = await deleteTempImage(fileId);
-      if (!deleted) {
-        console.error("[meal-analyzer] temp cleanup failed", { fileId });
-      }
-    }
   }
 }
 

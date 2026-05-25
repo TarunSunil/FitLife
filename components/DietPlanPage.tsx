@@ -6,6 +6,7 @@ import { Camera, ChefHat, Eye, ListPlus, PencilLine, Trash2, Upload } from "luci
 
 import {
   addMealLogAction,
+  analyzeMealImageAction,
   deleteMealLogAction,
   moveMealToWeeklyPlanAction,
   upsertWeeklyPlanEntryAction,
@@ -74,14 +75,23 @@ const ADJUSTMENT_MIN = 0.8;
 const ADJUSTMENT_MAX = 1.2;
 const ADJUSTMENT_STEP = 0.05;
 
-type PgAwareScanPayload = {
-  dish_name: string;
-  ingredients: string;
-  calories: number;
-  protein_g: number;
-  carbs_g: number;
-  fats_g: number;
+type QuickLogStatus = {
+  tone: "neutral" | "success" | "error";
+  text: string;
 };
+
+function normalizeScanIngredients(raw: string | string[] | undefined, fallback: string): string {
+  if (Array.isArray(raw)) {
+    const normalized = raw.map((item) => item.trim()).filter(Boolean);
+    return normalized.length ? normalized.join(", ") : fallback;
+  }
+
+  if (typeof raw === "string" && raw.trim().length) {
+    return raw.trim();
+  }
+
+  return fallback;
+}
 
 function scaleNutritionItems(items: AnalyzedNutritionItem[], multiplier: number): AnalyzedNutritionItem[] {
   return items.map((item) => ({
@@ -115,6 +125,7 @@ export default function DietPlanPage({
   const [addToDaySlot, setAddToDaySlot] = useState<(typeof SLOTS)[number]>("Lunch");
 
   const [analyzingImg, setAnalyzingImg] = useState(false);
+  const [quickLogStatus, setQuickLogStatus] = useState<QuickLogStatus | null>(null);
   const [verificationData, setVerificationData] = useState<{
     mealName: string;
     calories: number;
@@ -216,10 +227,6 @@ export default function DietPlanPage({
       nutritionItems: scaleNutritionItems(verificationData.nutritionItems, adjustmentMultiplier),
     };
   }, [verificationData, adjustmentMultiplier]);
-
-  const scanEndpoint = process.env.NEXT_PUBLIC_FASTAPI_URL
-    ? `${process.env.NEXT_PUBLIC_FASTAPI_URL.replace(/\/$/, "")}/scan`
-    : "";
 
   const addMeal = () => {
     setMessage(null);
@@ -463,69 +470,59 @@ export default function DietPlanPage({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!scanEndpoint) {
-      setMessage("Missing NEXT_PUBLIC_FASTAPI_URL. Please update your env and restart.");
+    const supportedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+    if (file.type && !supportedImageTypes.has(file.type)) {
+      const unsupportedTypeMsg = "Unsupported image format. Please upload JPG, PNG, or WEBP.";
+      setQuickLogStatus({ tone: "error", text: unsupportedTypeMsg });
+      setMessage(unsupportedTypeMsg);
       event.target.value = "";
       return;
     }
 
     setAnalyzingImg(true);
+    setQuickLogStatus({ tone: "neutral", text: "Analyzing your meal..." });
     setMessage("Analyzing your meal...");
 
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("image", file);
 
     startTransition(async () => {
       try {
-        const response = await fetch(scanEndpoint, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          setMessage(errorText || "Unable to analyze meal image");
+        const result = await analyzeMealImageAction(formData);
+        if (!result.ok || !result.data) {
+          const errorMessage = result.error ?? "Unable to analyze meal image";
+          setQuickLogStatus({ tone: "error", text: errorMessage });
+          setMessage(errorMessage);
           return;
         }
 
-        const payload = (await response.json()) as Partial<PgAwareScanPayload>;
-        if (
-          !payload.dish_name ||
-          typeof payload.calories !== "number" ||
-          typeof payload.protein_g !== "number" ||
-          typeof payload.carbs_g !== "number" ||
-          typeof payload.fats_g !== "number"
-        ) {
-          setMessage("Scan response format is invalid.");
-          return;
-        }
-
+        const payload = result.data;
         const calories = Math.max(0, Math.round(payload.calories));
-        const protein = Math.max(0, Math.round(payload.protein_g));
-        const carbs = Math.max(0, Math.round(payload.carbs_g));
-        const fats = Math.max(0, Math.round(payload.fats_g));
+        const protein = Math.max(0, Math.round(payload.protein));
+
+        const normalizedIngredients = normalizeScanIngredients(payload.ingredients, payload.mealName);
 
         setVerificationData({
-          mealName: payload.dish_name,
+          mealName: payload.mealName,
           calories,
           protein,
-          ingredients: payload.ingredients ?? payload.dish_name,
-          confidence: "Low",
-          nutritionItems: [
-            {
-              name: payload.dish_name,
-              calories,
-              protein,
-              carbs,
-              fats,
-            },
-          ],
+          ingredients: normalizedIngredients,
+          confidence: payload.confidence,
+          nutritionItems: payload.nutritionItems,
         });
         setAdjustmentMultiplier(1);
-        setMealIngredients(payload.ingredients ?? payload.dish_name);
+        setMealIngredients(normalizedIngredients);
+        setQuickLogStatus({ tone: "success", text: "Analysis complete. Please verify and save." });
         setMessage("Analysis complete");
-      } catch {
-        setMessage("Unable to process image right now. Please try again.");
+      } catch (error) {
+        const fallbackMessage =
+          error instanceof TypeError
+            ? "Cannot reach scan backend. Start FastAPI and try again."
+            : "Unable to process image right now. Please try again.";
+
+        setQuickLogStatus({ tone: "error", text: fallbackMessage });
+        setMessage(fallbackMessage);
       } finally {
         setAnalyzingImg(false);
       }
@@ -558,9 +555,12 @@ export default function DietPlanPage({
 
         if (result.ok && result.meal) {
           onMealAdded(result.meal);
+          setQuickLogStatus({ tone: "success", text: "Meal saved via Quick Log." });
           setMessage("Meal saved via Quick Log");
         } else {
-          setMessage(result.error ?? "Unable to auto-save quick log");
+          const saveError = result.error ?? "Unable to auto-save quick log";
+          setQuickLogStatus({ tone: "error", text: saveError });
+          setMessage(saveError);
         }
       } finally {
         setVerificationData(null);
@@ -575,6 +575,7 @@ export default function DietPlanPage({
     setMealName(adjustedVerificationData.mealName);
     setMealCaloriesInput(String(adjustedVerificationData.calories));
     setMealProteinInput(String(adjustedVerificationData.protein));
+    setQuickLogStatus({ tone: "neutral", text: "Auto-fill complete. Review and edit before saving." });
     setMessage("Auto-fill complete. Please review inputs.");
     setVerificationData(null);
     setAdjustmentMultiplier(1);
@@ -697,12 +698,26 @@ export default function DietPlanPage({
               <input
                 type="file"
                 className="hidden"
-                accept=".jpg,.png,.heic,.heif,.webp"
+                accept=".jpg,.jpeg,.png,.webp"
                 onChange={handleImageUpload}
                 disabled={analyzingImg}
               />
             </label>
           </h3>
+
+          {quickLogStatus ? (
+            <p
+              className={`text-xs ${
+                quickLogStatus.tone === "error"
+                  ? "text-rose-300"
+                  : quickLogStatus.tone === "success"
+                    ? "text-lime-300"
+                    : "text-zinc-300"
+              }`}
+            >
+              {quickLogStatus.text}
+            </p>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="text-xs text-zinc-400">
