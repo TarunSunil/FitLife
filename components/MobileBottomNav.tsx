@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ClipboardList, Dumbbell, Salad, Settings } from "lucide-react";
+import { BarChart3, ChefHat, Dumbbell, Scale, Settings } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: BarChart3 },
-  { href: "/workout-logger", label: "Logger", icon: Dumbbell },
-  { href: "/workout-logs", label: "Logs", icon: ClipboardList },
-  { href: "/diet", label: "Diet", icon: Salad },
+  { href: "/workout-logger", label: "Workout", icon: Dumbbell },
+  { href: "/diet", label: "Diet", icon: ChefHat },
+  { href: "/progress", label: "Progress", icon: Scale },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -16,7 +16,10 @@ export default function MobileBottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-black/95 p-2 backdrop-blur md:hidden">
+    <nav
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-black/95 p-2 backdrop-blur md:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+    >
       <ul className="grid grid-cols-5 gap-1">
         {NAV_ITEMS.map((item) => {
           const active = pathname === item.href;

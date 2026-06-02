@@ -1,4 +1,5 @@
 import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
+import { getTodayPlan } from "@/lib/constants/workoutPlan";
 import type { MealLog, WeeklyPlanEntry } from "@/lib/types/nutrition";
 
 const BASE_EXERCISES = [
@@ -55,6 +56,12 @@ const FRIDGE_MEAL_SUGGESTIONS = [
 ];
 
 export function getExerciseSuggestions(profile: FitnessProfile): string[] {
+  const todayPlan = getTodayPlan();
+
+  if (todayPlan.exercises.length > 0) {
+    return todayPlan.exercises.map((exercise) => exercise.name);
+  }
+
   if (profile.has_pullup_bar) {
     return BASE_EXERCISES;
   }

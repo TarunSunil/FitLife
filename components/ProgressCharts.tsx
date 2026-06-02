@@ -44,16 +44,16 @@ export default function ProgressCharts({ profile, logs, mealLogs }: ProgressChar
         <p className="text-xs text-zinc-400">Targets are plotted live from Settings updates.</p>
       </header>
 
-      <div className="rounded-xl border border-white/10 bg-black p-3">
+      <div className="rounded-xl border border-white/10 bg-black p-2 sm:p-3">
         <div className="mb-2 flex items-center justify-between text-xs text-zinc-300">
           <span>Training Volume</span>
           <span>{logs.length} logged sets</span>
         </div>
         <div className="h-56 w-full overflow-hidden rounded-lg">
           {mounted ? (
-            <ResponsiveContainer width="100%" height={224} debounce={500}>
-              <LineChart data={trainingData} margin={{ top: 5, right: 8, left: -12, bottom: 5 }}>
-                <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+            <ResponsiveContainer width="100%" height={224} debounce={500} minWidth={0} minHeight={0}>
+              <LineChart data={trainingData} margin={{ top: 5, right: 8, left: 0, bottom: 5 }}>
+                <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 10 }} interval="preserveStartEnd" />
                 <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{
@@ -84,16 +84,16 @@ export default function ProgressCharts({ profile, logs, mealLogs }: ProgressChar
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-black p-3">
+      <div className="rounded-xl border border-white/10 bg-black p-2 sm:p-3">
         <div className="mb-2 flex items-center justify-between text-xs text-zinc-300">
           <span>Calories Intake</span>
           <span>Target: {profile.target_calories}</span>
         </div>
         <div className="h-56 w-full overflow-hidden rounded-lg">
           {mounted ? (
-            <ResponsiveContainer width="100%" height={224} debounce={500}>
-              <LineChart data={nutritionData} margin={{ top: 5, right: 8, left: -12, bottom: 5 }}>
-                <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+            <ResponsiveContainer width="100%" height={224} debounce={500} minWidth={0} minHeight={0}>
+              <LineChart data={nutritionData} margin={{ top: 5, right: 8, left: 0, bottom: 5 }}>
+                <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 10 }} interval="preserveStartEnd" />
                 <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{
@@ -118,16 +118,16 @@ export default function ProgressCharts({ profile, logs, mealLogs }: ProgressChar
         </div>
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-black p-3">
+      <div className="rounded-xl border border-white/10 bg-black p-2 sm:p-3">
         <div className="mb-2 flex items-center justify-between text-xs text-zinc-300">
           <span>Protein Intake</span>
           <span>Target: {profile.target_protein}g</span>
         </div>
         <div className="h-56 w-full overflow-hidden rounded-lg">
           {mounted ? (
-            <ResponsiveContainer width="100%" height={224} debounce={500}>
-              <LineChart data={nutritionData} margin={{ top: 5, right: 8, left: -12, bottom: 5 }}>
-                <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
+            <ResponsiveContainer width="100%" height={224} debounce={500} minWidth={0} minHeight={0}>
+              <LineChart data={nutritionData} margin={{ top: 5, right: 8, left: 0, bottom: 5 }}>
+                <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 10 }} interval="preserveStartEnd" />
                 <YAxis stroke="#a1a1aa" tick={{ fill: "#a1a1aa", fontSize: 11 }} />
                 <Tooltip
                   contentStyle={{

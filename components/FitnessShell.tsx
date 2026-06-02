@@ -7,6 +7,7 @@ import {
   DatabaseZap,
   ListChecks,
   Salad,
+  Scale,
   Signal,
   SignalHigh,
   Target,
@@ -14,16 +15,21 @@ import {
 
 import { replayOfflineQueueAction } from "@/app/actions";
 import AppTopNav from "@/components/AppTopNav";
+import BodyWeightTracker from "@/components/BodyWeightTracker";
 import DietPlanPage from "@/components/DietPlanPage";
+import GoalProgressCard from "@/components/GoalProgressCard";
 import MobileBottomNav from "@/components/MobileBottomNav";
 import ProgressCharts from "@/components/ProgressCharts";
 import PWARegistrar from "@/components/PWARegistrar";
+import RestTimer from "@/components/RestTimer";
 import SettingsPage from "@/components/SettingsPage";
+import TodayWorkout from "@/components/TodayWorkout";
 import WorkoutLogsList from "@/components/WorkoutLogsList";
 import WorkoutLogger from "@/components/WorkoutLogger";
 import { clearQueue, readQueue } from "@/lib/offlineQueue";
-import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
-import type { MealLog, WeeklyPlanEntry } from "@/lib/types/nutrition";
+import { summarizeDailyMeals } from "@/lib/domain/profileRules";
+import type { BodyWeightLog, FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
+import type { MealLog, QuickBundle, SavedFoodItem, WeeklyPlanEntry } from "@/lib/types/nutrition";
 
 const PROFILE_SYNC_KEY = "fitlife:profile";
 const PREFERENCES_SYNC_KEY = "fitlife:preferences";
@@ -73,12 +79,16 @@ type FitnessShellProps = {
   initialLogs: WorkoutLog[];
   initialMealLogs: MealLog[];
   initialWeeklyPlan: WeeklyPlanEntry[];
+  initialSavedFoods?: SavedFoodItem[];
+  initialQuickBundles?: QuickBundle[];
+  initialBodyWeightLogs?: BodyWeightLog[];
   mode:
     | "dashboard"
     | "settings"
     | "workout-logger"
     | "workout-logs"
-    | "diet-plan";
+    | "diet-plan"
+    | "progress";
 };
 
 export default function FitnessShell({
@@ -86,12 +96,18 @@ export default function FitnessShell({
   initialLogs,
   initialMealLogs,
   initialWeeklyPlan,
+  initialSavedFoods = [],
+  initialQuickBundles = [],
+  initialBodyWeightLogs = [],
   mode,
 }: FitnessShellProps) {
   const [profile, setProfile] = useState(initialProfile);
   const [logs, setLogs] = useState(initialLogs);
   const [mealLogs, setMealLogs] = useState(initialMealLogs);
   const [weeklyPlan, setWeeklyPlan] = useState(initialWeeklyPlan);
+  const [savedFoods, setSavedFoods] = useState(initialSavedFoods);
+  const [quickBundles, setQuickBundles] = useState(initialQuickBundles);
+  const [bodyWeightLogs] = useState(initialBodyWeightLogs);
   const [preferences, setPreferences] = useState<AppPreferences>({
     deletion_confirmation_enabled: true,
   });
@@ -232,7 +248,17 @@ export default function FitnessShell({
     };
   }, [syncOfflineQueue]);
 
-  const todayVolume = useMemo(
+  const todayMealSummary = useMemo(
+    () =>
+      summarizeDailyMeals(
+        mealLogs,
+        new Date().toISOString().slice(0, 10),
+        profile.hidden_calorie_buffer_percent,
+      ),
+    [mealLogs, profile.hidden_calorie_buffer_percent],
+  );
+
+  const totalVolume = useMemo(
     () =>
       logs.reduce((sum, log) => {
         const volume = log.reps * log.weight_kg;
@@ -251,7 +277,7 @@ export default function FitnessShell({
         </p>
         <p className="flex items-center justify-between rounded-lg border border-white/10 bg-black px-3 py-2">
           <span>Total Volume</span>
-          <strong>{Math.round(todayVolume)} kg</strong>
+          <strong>{Math.round(totalVolume).toLocaleString()} kg</strong>
         </p>
         <p className="flex items-center justify-between rounded-lg border border-white/10 bg-black px-3 py-2">
           <span className="inline-flex items-center gap-1">
@@ -301,8 +327,15 @@ export default function FitnessShell({
           Diet Plan
         </Link>
         <Link
+          href="/progress"
+          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-black px-3 py-3 text-zinc-300 hover:text-white"
+        >
+          <Scale className="h-4 w-4" />
+          My Progress
+        </Link>
+        <Link
           href="/settings"
-          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-black px-3 py-2 text-zinc-300 hover:text-white"
+          className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-black px-3 py-3 text-zinc-300 hover:text-white"
         >
           <BookOpenText className="h-4 w-4" />
           Settings
@@ -318,7 +351,8 @@ export default function FitnessShell({
 
       {mode === "workout-logger" ? (
         <div className="mx-auto max-w-4xl space-y-4 px-4 pb-24 pt-6">
-          <WorkoutLogger profile={profile} onLogAdded={(log) => setLogs((curr) => [...curr, log])} />
+          <WorkoutLogger profile={profile} logs={logs} onLogAdded={(log) => setLogs((curr) => [...curr, log])} />
+          <RestTimer />
           <ProgressCharts profile={profile} logs={logs} mealLogs={mealLogs} />
         </div>
       ) : null}
@@ -327,6 +361,7 @@ export default function FitnessShell({
         <div className="mx-auto max-w-5xl px-4 pb-24 pt-6">
           <WorkoutLogsList
             logs={logs}
+            deletionConfirmationEnabled={preferences.deletion_confirmation_enabled}
             onLogUpdated={(updated) =>
               setLogs((current) =>
                 current.map((log) => (log.id === updated.id ? updated : log)),
@@ -345,6 +380,8 @@ export default function FitnessShell({
             profile={profile}
             mealLogs={mealLogs}
             weeklyPlan={weeklyPlan}
+            savedFoods={savedFoods}
+            quickBundles={quickBundles}
             deletionConfirmationEnabled={preferences.deletion_confirmation_enabled}
             onMealAdded={(meal) => setMealLogs((current) => [meal, ...current])}
             onMealDeleted={(mealId) =>
@@ -375,6 +412,10 @@ export default function FitnessShell({
                 return next;
               })
             }
+            onSavedFoodAdded={(food) => setSavedFoods((current) => [food, ...current])}
+            onSavedFoodDeleted={(id) => setSavedFoods((current) => current.filter((food) => food.id !== id))}
+            onBundleAdded={(bundle) => setQuickBundles((current) => [bundle, ...current])}
+            onBundleDeleted={(id) => setQuickBundles((current) => current.filter((bundle) => bundle.id !== id))}
           />
         </div>
       ) : null}
@@ -396,26 +437,45 @@ export default function FitnessShell({
       ) : null}
 
       {mode === "dashboard" ? (
-        <main className="min-h-screen px-4 pb-24 pt-6 md:px-6 md:pb-8 md:pt-8">
-          <div className="mx-auto max-w-screen-2xl md:grid md:grid-cols-[1fr_1.2fr_1.2fr] md:gap-4">
-            <div className="space-y-4">
-              {statsPanel}
-              {dashboardLinks}
-            </div>
+        <main className="min-h-screen px-4 pb-24 pt-4 md:px-6 md:pb-8 md:pt-8">
+          <div className="mx-auto max-w-screen-2xl">
+            <div className="space-y-4 md:grid md:grid-cols-[1fr_1.2fr_1.2fr] md:gap-4 md:space-y-0">
+              <div className="space-y-4">
+                <GoalProgressCard
+                  currentWeight={bodyWeightLogs.length > 0 ? bodyWeightLogs[bodyWeightLogs.length - 1].weight_kg : 57}
+                  targetCalories={profile.target_calories}
+                  targetProtein={profile.target_protein}
+                  todayCalories={todayMealSummary.calories}
+                  todayProtein={todayMealSummary.protein}
+                />
+                <TodayWorkout defaultExpanded={false} />
+                {statsPanel}
+                {dashboardLinks}
+              </div>
 
-            <div className="mt-4 md:mt-0">
-              <WorkoutLogger profile={profile} onLogAdded={(log) => setLogs((curr) => [...curr, log])} />
-            </div>
+              <div className="md:mt-0">
+                <WorkoutLogger profile={profile} logs={logs} onLogAdded={(log) => setLogs((curr) => [...curr, log])} />
+              </div>
 
-            <div className="mt-4 md:mt-0">
-              <ProgressCharts profile={profile} logs={logs} mealLogs={mealLogs} />
+              <div className="hidden md:block">
+                <ProgressCharts profile={profile} logs={logs} mealLogs={mealLogs} />
+              </div>
             </div>
-          </div>
-
-          <div className="mt-4 md:hidden">
-            <ProgressCharts profile={profile} logs={logs} mealLogs={mealLogs} />
           </div>
         </main>
+      ) : null}
+
+      {mode === "progress" ? (
+        <div className="mx-auto max-w-2xl space-y-4 px-4 pb-24 pt-6">
+          <GoalProgressCard
+            currentWeight={bodyWeightLogs.length > 0 ? bodyWeightLogs[bodyWeightLogs.length - 1].weight_kg : 57}
+            targetCalories={profile.target_calories}
+            targetProtein={profile.target_protein}
+            todayCalories={todayMealSummary.calories}
+            todayProtein={todayMealSummary.protein}
+          />
+          <BodyWeightTracker initialLogs={bodyWeightLogs} />
+        </div>
       ) : null}
 
       <MobileBottomNav />

@@ -2,7 +2,7 @@ import FitnessShell from "@/components/FitnessShell";
 import { fetchPageData } from "@/lib/data/fetchPageData";
 import { getBodyWeightLogs } from "@/lib/data/fitnessStore";
 
-export default async function Home() {
+export default async function ProgressRoute() {
   const [data, initialBodyWeightLogs] = await Promise.all([
     fetchPageData(),
     getBodyWeightLogs(),
@@ -12,7 +12,7 @@ export default async function Home() {
     <FitnessShell
       {...data}
       initialBodyWeightLogs={initialBodyWeightLogs}
-      mode="dashboard"
+      mode="progress"
     />
   );
 }

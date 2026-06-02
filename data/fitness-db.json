@@ -8,10 +8,10 @@
       "has_fridge": true,
       "has_kettle": true,
       "max_db_weight_kg": 30,
-      "target_calories": 2200,
-      "target_protein": 160,
+      "target_calories": 2700,
+      "target_protein": 105,
       "hidden_calorie_buffer_percent": 10,
-      "updated_at": "2026-03-30T00:00:00.000Z"
+      "updated_at": "2026-05-31T00:00:00.000Z"
     }
   ],
   "workout_logs": [],
@@ -51,16 +51,36 @@
     }
   ],
   "weekly_plan": [
-    {
-      "id": "local-profile-Monday-Breakfast",
-      "profile_id": "local-profile",
-      "day": "Monday",
-      "slot": "Breakfast",
-      "meal_name": "",
-      "ingredients": [],
-      "updated_at": "2026-03-27T08:24:49.482Z"
-    }
+    { "id": "local-profile-Monday-Breakfast", "profile_id": "local-profile", "day": "Monday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Monday-Lunch", "profile_id": "local-profile", "day": "Monday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Monday-Snack", "profile_id": "local-profile", "day": "Monday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Monday-Dinner", "profile_id": "local-profile", "day": "Monday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Tuesday-Breakfast", "profile_id": "local-profile", "day": "Tuesday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Tuesday-Lunch", "profile_id": "local-profile", "day": "Tuesday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Tuesday-Snack", "profile_id": "local-profile", "day": "Tuesday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Tuesday-Dinner", "profile_id": "local-profile", "day": "Tuesday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Wednesday-Breakfast", "profile_id": "local-profile", "day": "Wednesday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Wednesday-Lunch", "profile_id": "local-profile", "day": "Wednesday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Wednesday-Snack", "profile_id": "local-profile", "day": "Wednesday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Wednesday-Dinner", "profile_id": "local-profile", "day": "Wednesday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Thursday-Breakfast", "profile_id": "local-profile", "day": "Thursday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Thursday-Lunch", "profile_id": "local-profile", "day": "Thursday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Thursday-Snack", "profile_id": "local-profile", "day": "Thursday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Thursday-Dinner", "profile_id": "local-profile", "day": "Thursday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Friday-Breakfast", "profile_id": "local-profile", "day": "Friday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Friday-Lunch", "profile_id": "local-profile", "day": "Friday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Friday-Snack", "profile_id": "local-profile", "day": "Friday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Friday-Dinner", "profile_id": "local-profile", "day": "Friday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Saturday-Breakfast", "profile_id": "local-profile", "day": "Saturday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Saturday-Lunch", "profile_id": "local-profile", "day": "Saturday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Saturday-Snack", "profile_id": "local-profile", "day": "Saturday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Saturday-Dinner", "profile_id": "local-profile", "day": "Saturday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Sunday-Breakfast", "profile_id": "local-profile", "day": "Sunday", "slot": "Breakfast", "meal_name": "Egg omelette + toast + milk", "calories": 600, "protein": 30, "ingredients": ["4-5 eggs", "2 slices whole wheat toast", "glass of milk", "veggies"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Sunday-Lunch", "profile_id": "local-profile", "day": "Sunday", "slot": "Lunch", "meal_name": "Rice + dal + chicken/fish + sabzi + curd", "calories": 800, "protein": 35, "ingredients": ["rice/roti", "dal", "chicken or fish", "sabzi", "curd"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Sunday-Snack", "profile_id": "local-profile", "day": "Sunday", "slot": "Snack", "meal_name": "Peanut butter toast + banana", "calories": 400, "protein": 12, "ingredients": ["whole wheat bread", "peanut butter", "1 banana"], "updated_at": "2026-05-31T00:00:00.000Z" },
+    { "id": "local-profile-Sunday-Dinner", "profile_id": "local-profile", "day": "Sunday", "slot": "Dinner", "meal_name": "Roti + paneer/egg/chicken + dal + salad", "calories": 700, "protein": 30, "ingredients": ["roti", "paneer or chicken", "dal", "salad"], "updated_at": "2026-05-31T00:00:00.000Z" }
   ],
   "saved_foods": [],
-  "quick_bundles": []
+  "quick_bundles": [],
+  "body_weight_logs": []
 }

@@ -5,9 +5,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Camera, ChefHat, Eye, ListPlus, PencilLine, Trash2, Upload } from "lucide-react";
 
 import {
+  addQuickBundleAction,
   addMealLogAction,
+  addSavedFoodAction,
   analyzeMealImageAction,
+  deleteQuickBundleAction,
   deleteMealLogAction,
+  deleteSavedFoodAction,
+  logQuickBundleAction,
   moveMealToWeeklyPlanAction,
   upsertWeeklyPlanEntryAction,
 } from "@/app/actions";
@@ -19,6 +24,8 @@ import type { FitnessProfile } from "@/lib/types/fitness";
 import type {
   AnalyzedNutritionItem,
   MealLog,
+  QuickBundle,
+  SavedFoodItem,
   WeeklyPlanEntry,
 } from "@/lib/types/nutrition";
 
@@ -26,10 +33,16 @@ type DietPlanPageProps = {
   profile: FitnessProfile;
   mealLogs: MealLog[];
   weeklyPlan: WeeklyPlanEntry[];
+  savedFoods: SavedFoodItem[];
+  quickBundles: QuickBundle[];
   deletionConfirmationEnabled: boolean;
   onMealAdded: (meal: MealLog) => void;
   onMealDeleted: (mealId: string) => void;
   onPlanUpserted: (entry: WeeklyPlanEntry) => void;
+  onSavedFoodAdded: (food: SavedFoodItem) => void;
+  onSavedFoodDeleted: (id: string) => void;
+  onBundleAdded: (bundle: QuickBundle) => void;
+  onBundleDeleted: (id: string) => void;
 };
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
@@ -107,10 +120,16 @@ export default function DietPlanPage({
   profile,
   mealLogs,
   weeklyPlan,
+  savedFoods,
+  quickBundles,
   deletionConfirmationEnabled,
   onMealAdded,
   onMealDeleted,
   onPlanUpserted,
+  onSavedFoodAdded,
+  onSavedFoodDeleted,
+  onBundleAdded,
+  onBundleDeleted,
 }: DietPlanPageProps) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
@@ -151,6 +170,13 @@ export default function DietPlanPage({
   const [editCaloriesInput, setEditCaloriesInput] = useState("0");
   const [editProteinInput, setEditProteinInput] = useState("0");
   const [editIngredients, setEditIngredients] = useState("");
+  const [savedFoodName, setSavedFoodName] = useState("");
+  const [savedFoodCaloriesInput, setSavedFoodCaloriesInput] = useState("300");
+  const [savedFoodProteinInput, setSavedFoodProteinInput] = useState("20");
+  const [savedFoodOutside, setSavedFoodOutside] = useState(false);
+  const [bundleName, setBundleName] = useState("");
+  const [selectedFoodIds, setSelectedFoodIds] = useState<string[]>([]);
+  const [quickLogDate, setQuickLogDate] = useState(new Date().toISOString().slice(0, 10));
 
   const hasPlannerContent = (entry: WeeklyPlanEntry | undefined) =>
     Boolean(
@@ -1124,6 +1150,232 @@ export default function DietPlanPage({
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
+        <h3 className="text-sm font-semibold text-zinc-200">Saved Foods</h3>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="text-xs text-zinc-400">
+            Food Name
+            <input
+              value={savedFoodName}
+              onChange={(event) => setSavedFoodName(event.target.value)}
+              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-3 text-base text-white outline-none focus:border-lime-500"
+              placeholder="Peanut butter toast"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            Calories
+            <input
+              type="number"
+              inputMode="numeric"
+              value={savedFoodCaloriesInput}
+              onChange={(event) => setSavedFoodCaloriesInput(normalizeNumericInput(event.target.value))}
+              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-3 text-base text-white outline-none focus:border-lime-500"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            Protein (g)
+            <input
+              type="number"
+              inputMode="numeric"
+              value={savedFoodProteinInput}
+              onChange={(event) => setSavedFoodProteinInput(normalizeNumericInput(event.target.value))}
+              className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-3 text-base text-white outline-none focus:border-lime-500"
+            />
+          </label>
+          <label className="text-xs text-zinc-400">
+            <span className="mb-1 block">Outside Food</span>
+            <button
+              type="button"
+              onClick={() => setSavedFoodOutside((current) => !current)}
+              className={`min-h-[44px] rounded-md border px-3 py-1.5 text-xs ${
+                savedFoodOutside
+                  ? "border-amber-500/60 bg-amber-500/20 text-amber-200"
+                  : "border-white/10 bg-zinc-950 text-zinc-300"
+              }`}
+            >
+              {savedFoodOutside ? "Yes" : "No"}
+            </button>
+          </label>
+        </div>
+        <button
+          type="button"
+          disabled={pending || savedFoodName.trim().length < 2}
+          onClick={() => {
+            startTransition(async () => {
+              const result = await addSavedFoodAction({
+                name: savedFoodName.trim(),
+                calories: Number(savedFoodCaloriesInput) || 0,
+                protein: Number(savedFoodProteinInput) || 0,
+                is_outside_food: savedFoodOutside,
+              });
+
+              if (result.ok && result.savedFood) {
+                onSavedFoodAdded(result.savedFood);
+                setSavedFoodName("");
+                setSavedFoodCaloriesInput("300");
+                setSavedFoodProteinInput("20");
+                setSavedFoodOutside(false);
+                setMessage("Saved food added");
+                return;
+              }
+
+              setMessage(result.error ?? "Unable to save food");
+            });
+          }}
+          className="w-full rounded-md bg-lime-500 px-3 py-3 text-sm font-semibold text-black transition-transform disabled:opacity-60 active:scale-95 sm:w-auto"
+        >
+          Add Saved Food
+        </button>
+        {savedFoods.length > 0 ? (
+          <ul className="max-h-40 space-y-1 overflow-auto">
+            {savedFoods.map((food) => (
+              <li
+                key={food.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300"
+              >
+                <span>{food.name} · {food.calories} kcal · {food.protein}g protein</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    startTransition(async () => {
+                      const result = await deleteSavedFoodAction(food.id);
+                      if (result.ok) {
+                        onSavedFoodDeleted(food.id);
+                        setMessage("Saved food removed");
+                      }
+                    });
+                  }}
+                  className="rounded-md border border-red-500/40 p-3 text-red-300"
+                  aria-label={`Delete ${food.name}`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-white/10 bg-black/60 p-3">
+        <h3 className="text-sm font-semibold text-zinc-200">Quick Bundles</h3>
+        <p className="text-xs text-zinc-500">Select saved foods to bundle for one-tap logging.</p>
+        {savedFoods.length === 0 ? <p className="text-xs text-zinc-500">Add saved foods first.</p> : null}
+        <div className="flex flex-wrap gap-2">
+          {savedFoods.map((food) => (
+            <button
+              key={food.id}
+              type="button"
+              onClick={() =>
+                setSelectedFoodIds((current) =>
+                  current.includes(food.id)
+                    ? current.filter((id) => id !== food.id)
+                    : [...current, food.id],
+                )
+              }
+              className={`rounded-full border px-3 py-2 text-xs transition ${
+                selectedFoodIds.includes(food.id)
+                  ? "border-lime-500 bg-lime-500/20 text-lime-300"
+                  : "border-white/15 bg-black text-zinc-300"
+              }`}
+            >
+              {food.name}
+            </button>
+          ))}
+        </div>
+        <label className="text-xs text-zinc-400">
+          Bundle Name
+          <input
+            value={bundleName}
+            onChange={(event) => setBundleName(event.target.value)}
+            className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-3 text-base text-white outline-none focus:border-lime-500"
+            placeholder="Post-workout snack"
+          />
+        </label>
+        <button
+          type="button"
+          disabled={pending || selectedFoodIds.length === 0 || bundleName.trim().length < 2}
+          onClick={() => {
+            startTransition(async () => {
+              const result = await addQuickBundleAction({
+                name: bundleName.trim(),
+                item_ids: selectedFoodIds,
+              });
+
+              if (result.ok && result.bundle) {
+                onBundleAdded(result.bundle);
+                setBundleName("");
+                setSelectedFoodIds([]);
+                setMessage("Bundle created");
+                return;
+              }
+
+              setMessage(result.error ?? "Unable to create bundle");
+            });
+          }}
+          className="w-full rounded-md bg-lime-500 px-3 py-3 text-sm font-semibold text-black transition-transform disabled:opacity-60 active:scale-95 sm:w-auto"
+        >
+          Create Bundle
+        </button>
+        {quickBundles.length > 0 ? (
+          <ul className="max-h-40 space-y-1 overflow-auto">
+            {quickBundles.map((bundle) => (
+              <li
+                key={bundle.id}
+                className="flex items-center justify-between gap-2 rounded-md border border-white/10 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-300"
+              >
+                <span>{bundle.name} · {bundle.item_ids.length} items</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startTransition(async () => {
+                        const result = await logQuickBundleAction({
+                          bundle_id: bundle.id,
+                          consumed_on: quickLogDate,
+                        });
+
+                        if (result.ok && result.meal) {
+                          onMealAdded(result.meal);
+                          setMessage(`${bundle.name} logged`);
+                        }
+                      });
+                    }}
+                    className="rounded-md border border-lime-500/40 px-3 py-2 text-lime-300"
+                  >
+                    Log
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      startTransition(async () => {
+                        const result = await deleteQuickBundleAction(bundle.id);
+                        if (result.ok) {
+                          onBundleDeleted(bundle.id);
+                          setMessage("Bundle removed");
+                        }
+                      });
+                    }}
+                    className="rounded-md border border-red-500/40 p-3 text-red-300"
+                    aria-label={`Delete ${bundle.name}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <label className="text-xs text-zinc-400">
+          Log to Date
+          <input
+            type="date"
+            value={quickLogDate}
+            onChange={(event) => setQuickLogDate(event.target.value)}
+            className="mt-1 w-full rounded-md border border-white/10 bg-zinc-950 px-2 py-3 text-base text-white outline-none focus:border-lime-500"
+          />
+        </label>
       </section>
 
       <AnimatePresence>

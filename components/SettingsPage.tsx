@@ -37,7 +37,7 @@ function ToggleRow({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
+    <label className="flex min-h-[44px] items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm">
       <span>{label}</span>
       <button
         type="button"
@@ -147,6 +147,11 @@ export default function SettingsPage({
       </header>
 
       <div className="space-y-2">
+        <div className="rounded-xl border border-lime-500/20 bg-lime-500/5 p-3 text-xs">
+          <p className="mb-1 font-semibold text-lime-300">Your 12-Month Goal</p>
+          <p className="text-zinc-400">57 kg to 65-68 kg · Push/Pull/Legs + Upper/Lower · 2,700 kcal/day · 105g+ protein</p>
+        </div>
+
         <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
           Gym Equipment
         </h3>
@@ -202,11 +207,12 @@ export default function SettingsPage({
           </span>
           <input
             type="number"
+            inputMode="numeric"
             value={draft.target_calories}
             min={900}
             max={7000}
             onChange={(event) => patch({ target_calories: Number(event.target.value) || 0 })}
-            className="w-full rounded-lg border border-white/15 bg-black px-3 py-2 text-white outline-none focus:border-lime-500"
+            className="w-full rounded-lg border border-white/15 bg-black px-3 py-3 text-base text-white outline-none focus:border-lime-500"
           />
         </label>
 
@@ -217,11 +223,12 @@ export default function SettingsPage({
           </span>
           <input
             type="number"
+            inputMode="numeric"
             value={draft.target_protein}
             min={30}
             max={400}
             onChange={(event) => patch({ target_protein: Number(event.target.value) || 0 })}
-            className="w-full rounded-lg border border-white/15 bg-black px-3 py-2 text-white outline-none focus:border-lime-500"
+            className="w-full rounded-lg border border-white/15 bg-black px-3 py-3 text-base text-white outline-none focus:border-lime-500"
           />
         </label>
       </div>
@@ -233,11 +240,12 @@ export default function SettingsPage({
         </span>
         <input
           type="number"
+          inputMode="numeric"
           value={draft.max_db_weight_kg}
           min={1}
           max={200}
           onChange={(event) => patch({ max_db_weight_kg: Number(event.target.value) || 1 })}
-          className="w-full rounded-lg border border-white/15 bg-black px-3 py-2 text-white outline-none focus:border-lime-500"
+          className="w-full rounded-lg border border-white/15 bg-black px-3 py-3 text-base text-white outline-none focus:border-lime-500"
         />
       </label>
 
@@ -282,7 +290,7 @@ export default function SettingsPage({
         type="button"
         onClick={save}
         disabled={pending}
-        className="w-full rounded-xl bg-lime-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-lime-400 disabled:opacity-60"
+        className="w-full rounded-xl bg-lime-500 px-4 py-4 text-base font-semibold text-black transition-transform hover:bg-lime-400 disabled:opacity-60 active:scale-95"
       >
         {pending ? "Saving..." : "Save Settings"}
       </button>

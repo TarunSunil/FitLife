@@ -1,16 +1,15 @@
 {
   "name": "Obsidian Fitness Tracker",
-  "short_name": "ObsidianFit",
+  "short_name": "FitLife",
   "start_url": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#000000",
   "theme_color": "#000000",
-  "description": "Adaptive fitness tracking driven by gym and kitchen environment settings.",
+  "description": "Adaptive fitness tracking - PPL + Upper/Lower muscle plan.",
+  "orientation": "portrait",
   "icons": [
-    {
-      "src": "/favicon.ico",
-      "sizes": "48x48",
-      "type": "image/x-icon"
-    }
-  ]
+    { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
+  ],
+  "categories": ["health", "fitness"]
 }

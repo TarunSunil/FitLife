@@ -29,6 +29,14 @@ export type WorkoutLog = {
   performed_at: string;
 };
 
+export type BodyWeightLog = {
+  id: string;
+  weight_kg: number;
+  logged_on: string;
+  note?: string;
+  created_at: string;
+};
+
 export type FitnessDatabase = {
   profiles: FitnessProfile[];
   workout_logs: WorkoutLog[];
@@ -36,6 +44,7 @@ export type FitnessDatabase = {
   weekly_plan: WeeklyPlanEntry[];
   saved_foods: SavedFoodItem[];
   quick_bundles: QuickBundle[];
+  body_weight_logs: BodyWeightLog[];
 };
 
 export const PROFILE_ID = "local-profile";
@@ -48,8 +57,8 @@ export const DEFAULT_PROFILE: FitnessProfile = {
   has_fridge: true,
   has_kettle: true,
   max_db_weight_kg: 30,
-  target_calories: 2200,
-  target_protein: 160,
+  target_calories: 2700,
+  target_protein: 105,
   hidden_calorie_buffer_percent: 10,
   updated_at: new Date().toISOString(),
 };

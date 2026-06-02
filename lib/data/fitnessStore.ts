@@ -10,6 +10,7 @@ import {
   PROFILE_ID,
   type FitnessDatabase,
   type FitnessProfile,
+  type BodyWeightLog,
   type WorkoutLog,
 } from "@/lib/types/fitness";
 import type {
@@ -115,6 +116,17 @@ function normalizeQuickBundle(bundle: Partial<QuickBundle>): QuickBundle {
   };
 }
 
+function normalizeBodyWeightLog(log: Partial<BodyWeightLog>): BodyWeightLog {
+  return {
+    id: log.id ?? randomUUID(),
+    weight_kg: log.weight_kg ?? 57,
+    logged_on: log.logged_on ?? new Date().toISOString().slice(0, 10),
+    note: log.note,
+    created_at: log.created_at ?? new Date().toISOString(),
+  };
+}
+
+// Note: requires migration 20260410_add_meal_and_weekly_plan_fields.sql to be run on fresh DB
 function normalizePlanEntry(entry: Partial<WeeklyPlanEntry>): WeeklyPlanEntry {
   return {
     id: entry.id ?? randomUUID(),
@@ -137,6 +149,7 @@ function createSeededDb(): FitnessDatabase {
     weekly_plan: [],
     saved_foods: [],
     quick_bundles: [],
+    body_weight_logs: [],
   };
 }
 
@@ -236,6 +249,7 @@ async function ensureDb(): Promise<FitnessDatabase> {
       weekly_plan: Array.isArray(parsed.weekly_plan) ? parsed.weekly_plan : [],
       saved_foods: Array.isArray(parsed.saved_foods) ? parsed.saved_foods : [],
       quick_bundles: Array.isArray(parsed.quick_bundles) ? parsed.quick_bundles : [],
+      body_weight_logs: Array.isArray(parsed.body_weight_logs) ? parsed.body_weight_logs : [],
     };
 
     if (!normalized.profiles.length) {
@@ -742,6 +756,59 @@ export async function getQuickBundles(): Promise<QuickBundle[]> {
   return db.quick_bundles
     .map((bundle) => normalizeQuickBundle(bundle))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+}
+
+export async function getBodyWeightLogs(): Promise<BodyWeightLog[]> {
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("body_weight_logs")
+      .select("*")
+      .eq("profile_id", PROFILE_ID)
+      .order("logged_on", { ascending: true });
+
+    if (!error && data) {
+      return (data as Partial<BodyWeightLog>[]).map((log) => normalizeBodyWeightLog(log));
+    }
+
+    return [];
+  }
+
+  const db = await ensureDb();
+  return (db.body_weight_logs ?? [])
+    .map((log) => normalizeBodyWeightLog(log))
+    .sort((a, b) => a.logged_on.localeCompare(b.logged_on));
+}
+
+export async function insertBodyWeightLog(
+  payload: Pick<BodyWeightLog, "weight_kg" | "logged_on" | "note">,
+): Promise<BodyWeightLog> {
+  const supabase = getSupabaseClient();
+  const newLog = normalizeBodyWeightLog(payload);
+
+  if (supabase) {
+    const { data, error } = await supabase
+      .from("body_weight_logs")
+      .insert({ ...newLog, profile_id: PROFILE_ID })
+      .select()
+      .single();
+
+    if (!error && data) {
+      return normalizeBodyWeightLog(data as Partial<BodyWeightLog>);
+    }
+
+    throw new Error(error?.message ?? "Failed to insert body weight log");
+  }
+
+  const db = await ensureDb();
+  if (!db.body_weight_logs) {
+    db.body_weight_logs = [];
+  }
+
+  db.body_weight_logs.push(newLog);
+  await persistDb(db);
+  return newLog;
 }
 
 export async function getQuickBundleById(bundleId: string): Promise<QuickBundle | null> {

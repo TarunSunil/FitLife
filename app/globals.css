@@ -37,3 +37,109 @@ body {
     padding-bottom: 5.5rem;
   }
 }
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: #27272a;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #84cc16;
+  cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #84cc16;
+  border: none;
+  cursor: pointer;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+.min-h-screen {
+  min-height: 100dvh;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+* {
+  -webkit-tap-highlight-color: rgba(132, 204, 22, 0.1);
+}
+
+button,
+a,
+label {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+span {
+  -webkit-user-select: auto;
+  user-select: auto;
+}
+
+.planner-scroll,
+.weekly-planner-scroll {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.planner-scroll::-webkit-scrollbar,
+.weekly-planner-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.weekly-planner-scroll {
+  scroll-snap-type: x mandatory;
+}
+
+.weekly-planner-scroll > * {
+  scroll-snap-align: start;
+}

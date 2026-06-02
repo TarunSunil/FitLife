@@ -1,25 +1,12 @@
 import FitnessShell from "@/components/FitnessShell";
-import {
-  getMealLogs,
-  getProfile,
-  getWeeklyPlan,
-  getWorkoutLogs,
-} from "@/lib/data/fitnessStore";
+import { fetchPageData } from "@/lib/data/fetchPageData";
 
 export default async function DietRoute() {
-  const [profile, logs, meals, weeklyPlan] = await Promise.all([
-    getProfile(),
-    getWorkoutLogs(),
-    getMealLogs(),
-    getWeeklyPlan(),
-  ]);
+  const data = await fetchPageData();
 
   return (
     <FitnessShell
-      initialProfile={profile}
-      initialLogs={logs}
-      initialMealLogs={meals}
-      initialWeeklyPlan={weeklyPlan}
+      {...data}
       mode="diet-plan"
     />
   );

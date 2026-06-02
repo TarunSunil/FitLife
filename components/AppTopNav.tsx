@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/workout-logger", label: "Workout Logger" },
   { href: "/workout-logs", label: "Workout Logs" },
   { href: "/diet", label: "Diet Plan" },
+  { href: "/progress", label: "Progress" },
   { href: "/settings", label: "Settings" },
 ];
 

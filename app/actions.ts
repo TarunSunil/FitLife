@@ -8,6 +8,7 @@ import {
   deleteSavedFood,
   deleteMealLog,
   deleteWorkoutLog,
+  insertBodyWeightLog,
   getQuickBundleById,
   getSavedFoodsByIds,
   insertQuickBundle,
@@ -20,7 +21,7 @@ import {
   upsertWeeklyPlanEntry,
 } from "@/lib/data/fitnessStore";
 import { isTempoRequired } from "@/lib/domain/profileRules";
-import type { FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
+import type { BodyWeightLog, FitnessProfile, WorkoutLog } from "@/lib/types/fitness";
 import type {
   AnalyzedNutritionItem,
   MealLog,
@@ -170,6 +171,12 @@ const moveMealToWeeklyPlanSchema = z.object({
   ingredients: z.array(z.string().min(1).max(50)).max(20).optional(),
 });
 
+const bodyWeightSchema = z.object({
+  weight_kg: z.number().min(30).max(200),
+  logged_on: z.string().min(10).max(10),
+  note: z.string().max(200).optional(),
+});
+
 const fastApiScanResponseSchema = z.object({
   dish_name: z.string().min(1),
   ingredients: z.union([z.string(), z.array(z.string())]).optional(),
@@ -244,6 +251,12 @@ export type AnalyzeMealResult = {
     confidence: "High" | "Low";
     nutritionItems: AnalyzedNutritionItem[];
   };
+};
+
+export type BodyWeightActionResult = {
+  ok: boolean;
+  log?: BodyWeightLog;
+  error?: string;
 };
 
 function getMealAnalyzerEndpoint(): string | null {
@@ -507,6 +520,28 @@ export async function updateWorkoutLogAction(
   revalidatePath("/workout-logs");
 
   return { ok: true, log: updated };
+}
+
+export async function addBodyWeightLogAction(
+  payload: z.infer<typeof bodyWeightSchema>,
+): Promise<BodyWeightActionResult> {
+  const parsed = bodyWeightSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return { ok: false, error: "Invalid body weight payload" };
+  }
+
+  try {
+    const log = await insertBodyWeightLog(parsed.data);
+    revalidatePath("/");
+    revalidatePath("/progress");
+    return { ok: true, log };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Unable to log weight",
+    };
+  }
 }
 
 export async function deleteWorkoutLogAction(logId: string): Promise<GenericMutationResult> {
